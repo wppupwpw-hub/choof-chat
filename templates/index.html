@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}شات بوت فيسبوك ماسنجر{% endblock %}
+
+{% block content %}
+<div class="container-fluid h-100">
+    <div class="row h-100">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2 sidebar d-none d-md-block">
+            <div class="sidebar-header">
+                <div class="d-flex align-items-center">
+                    <i class="fab fa-facebook-messenger text-primary me-2 fs-4"></i>
+                    <h5 class="mb-0">شات بوت</h5>
+                </div>
+            </div>
+            
+            <div class="sidebar-content">
+                <div class="chat-info">
+                    <div class="status-indicator">
+                        <span class="status-dot online"></span>
+                        <span class="status-text">متصل</span>
+                    </div>
+                    
+                    <div class="integration-status mt-3">
+                        <h6>ربط فيسبوك</h6>
+                        <div id="facebook-status" class="text-muted">
+                            <i class="fas fa-circle text-warning me-1"></i>
+                            جاهز للإعداد
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="col-md-9 col-lg-10 main-content">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="d-flex align-items-center">
+                    <div class="d-md-none me-3">
+                        <button class="btn btn-link p-0" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="chat-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    
+                    <div class="chat-info ms-3">
+                        <h6 class="mb-0">مساعد شات بوت فيسبوك</h6>
+                        <small class="text-muted">جاهز دائماً لمساعدتك</small>
+                    </div>
+                    
+                    <div class="ms-auto">
+                        <a href="/facebook-setup" class="btn btn-success btn-sm me-2">
+                            <i class="fab fa-facebook me-1"></i>
+                            دليل الربط
+                        </a>
+                        <button class="btn btn-outline-primary btn-sm" onclick="clearChat()">
+                            <i class="fas fa-trash me-1"></i>
+                            مسح المحادثة
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div class="chat-container">
+                <div id="chat-messages" class="chat-messages">
+                    <!-- Welcome Message -->
+                    <div class="message bot-message">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <div class="message-bubble">
+                                <p class="mb-1">مرحباً! أنا مساعد شات بوت فيسبوك ماسنجر 👋</p>
+                                <p class="mb-0">أنا جاهز لمساعدتك ويمكنني الاتصال بفيسبوك ماسنجر. كيف يمكنني مساعدتك اليوم؟</p>
+                            </div>
+                            <div class="message-time">الآن</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="typing-indicator" style="display: none;">
+                    <div class="message bot-message">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <div class="typing-bubble">
+                                <div class="typing-dots">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="message-input-container">
+                <form id="chat-form" class="message-input-form">
+                    <div class="input-group">
+                        <button type="button" class="btn btn-outline-secondary" title="Attach file">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        
+                        <input 
+                            type="text" 
+                            id="message-input" 
+                            class="form-control" 
+                            placeholder="اكتب رسالة..." 
+                            autocomplete="off"
+                            maxlength="2000"
+                        >
+                        
+                        <button type="button" class="btn btn-outline-secondary" title="Add emoji">
+                            <i class="fas fa-smile"></i>
+                        </button>
+                        
+                        <button type="submit" class="btn btn-primary" id="send-button">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="input-feedback">
+                    <small class="text-muted">اضغط Enter للإرسال • Shift+Enter لسطر جديد</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mobile Sidebar -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title">
+            <i class="fab fa-facebook-messenger text-primary me-2"></i>
+            شات بوت
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="chat-info">
+            <div class="status-indicator">
+                <span class="status-dot online"></span>
+                <span class="status-text">متصل</span>
+            </div>
+            
+            <div class="integration-status mt-3">
+                <h6>ربط فيسبوك</h6>
+                <div class="text-muted mb-2" id="facebook-status">
+                    <i class="fas fa-circle text-warning me-1"></i>
+                    جاهز للإعداد
+                </div>
+                
+                <!-- Page Access Token Input -->
+                <div class="mt-3">
+                    <label class="form-label small">Page Access Token:</label>
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="password" class="form-control" id="page-access-token" 
+                               placeholder="الصق الرمز هنا...">
+                        <button class="btn btn-outline-primary" type="button" onclick="saveToken()">
+                            <i class="fas fa-save"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        احصل على الرمز من <a href="/facebook-setup" class="text-primary">دليل الربط</a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Modal -->
+<div class="modal fade" id="errorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    Error
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="error-message">An error occurred. Please try again.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
