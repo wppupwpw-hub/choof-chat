@@ -1,13 +1,11 @@
 [build]
-  # Build configuration for Netlify
   publish = "."
   command = "pip install -r requirements-deploy.txt"
 
 [build.environment]
-  # Python version for functions
   PYTHON_VERSION = "3.11"
 
-# Functions configuration for Flask app  
+# Redirects
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/main/:splat"
@@ -23,19 +21,17 @@
   to = "/.netlify/functions/main/facebook-setup"
   status = 200
 
-# Serve static files
 [[redirects]]
   from = "/static/*"
   to = "/static/:splat"
   status = 200
 
-# Fallback for all other routes to Flask app
 [[redirects]]
   from = "/*"
   to = "/.netlify/functions/main/:splat"
   status = 200
 
-# Headers for security and performance
+# Headers
 [[headers]]
   for = "/*"
   [headers.values]
@@ -45,13 +41,11 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: https:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://graph.facebook.com;"
 
-# Cache static assets
 [[headers]]
   for = "/static/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Cache CSS and JS files
 [[headers]]
   for = "*.css"
   [headers.values]
@@ -62,54 +56,30 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Environment variables (set these in Netlify dashboard)
+# Context environments
 [context.production.environment]
   NODE_ENV = "production"
 
 [context.deploy-preview.environment]
   NODE_ENV = "development"
 
-# Form handling (if needed for contact forms)
-[build.processing]
-  skip_processing = false
-
-[build.processing.css]
-  bundle = true
-  minify = true
-
-[build.processing.js]
-  bundle = true
-  minify = true
-
-[build.processing.html]
-  pretty_urls = true
-
-# Custom error pages
+# Custom error page
 [[redirects]]
   from = "/404"
   to = "/index.html"
   status = 404
 
-# Edge functions configuration (for advanced features)
-[edge_functions]
-  path = "/api/*"
-
-# Plugin configuration for optimization
+# Plugins
 [[plugins]]
   package = "@netlify/plugin-lighthouse"
 
-# Development settings
+# Dev server
 [dev]
   command = "python main.py"
   port = 5000
   targetPort = 5000
   autoLaunch = true
 
-# Function configuration for serverless deployment
+# Functions
 [functions]
   directory = "netlify/functions"
-  node_bundler = "esbuild"
-
-# Asset optimization
-[build.processing.images]
-  compress = true
