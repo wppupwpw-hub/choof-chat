@@ -3,7 +3,7 @@
   command = "pip install -r requirements-deploy.txt"
 
 [build.environment]
-  PYTHON_VERSION = "3.11"
+  PYTHON_VERSION = "3.10"
 
 # Redirects
 [[redirects]]
