@@ -169,9 +169,12 @@
         body: JSON.stringify({ message: prompt, type: "image" }),
       });
       const result = await response.json();
-      return result.predictions?.[0]?.bytesBase64Encoded
-        ? `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`
-        : null;
+
+      if (result.image) {
+        return `data:image/png;base64,${result.image}`;
+      } else {
+        throw new Error("لم يتم توليد صورة أو الاستجابة غير صحيحة");
+      }
     }
   </script>
 
