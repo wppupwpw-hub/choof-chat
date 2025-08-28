@@ -121,6 +121,20 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
+    // --- منطق توليد الصور مدمج من Botdevx.html ---
+    const PROXY_SERVERS = [
+      "https://api.allorigins.win/raw?url=",
+      "https://corsproxy.io/?",
+      "https://api.codetabs.com/v1/proxy/?quest="
+    ];
+    let currentProxyIndex = 0;
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let isGeneratingImage = false; // لتجنب طلبات متزامنة
+    
+    // API URL الافتراضي. سيتم تعديله في دالة Netlify
+    let imageApiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=';
+
     async function sendMessage() {
       const userMessage = input.value.trim();
       if (!userMessage) return;
@@ -132,6 +146,11 @@
       const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
 
       if (isImageRequest) {
+        if (isGeneratingImage) {
+            addMessage("bot", "يرجى الانتظار حتى تكتمل الصورة الحالية قبل طلب أخرى.", true);
+            return;
+        }
+        isGeneratingImage = true;
         let loadingMsgDiv;
         try {
           loadingMsgDiv = document.createElement("div");
@@ -140,8 +159,13 @@
           chatContainer.appendChild(loadingMsgDiv);
           chatContainer.scrollTop = chatContainer.scrollHeight;
 
-          const imageUrl = await generateImageFromPrompt(userMessage);
-          loadingMsgDiv.remove(); // Remove loading message after image is generated or failed
+          // ترجمة النص إلى الإنجليزية قبل إرساله للـ API
+          const translatedPrompt = await translateToEnglish(userMessage);
+          
+          // استخدام دالة tryGenerateImage المدمجة
+          const imageUrl = await tryGenerateImage(translatedPrompt, userMessage);
+          
+          loadingMsgDiv.remove(); 
           if (imageUrl) {
             addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
           } else {
@@ -149,8 +173,10 @@
           }
         } catch (err) {
           console.error("Image generation error:", err);
-          if (loadingMsgDiv) loadingMsgDiv.remove(); // Ensure loading message is removed on error
+          if (loadingMsgDiv) loadingMsgDiv.remove(); 
           addMessage("bot", `❌ حدث خطأ أثناء إنشاء الصورة: ${err.message || "خطأ غير معروف"}.`, true);
+        } finally {
+            isGeneratingImage = false;
         }
       } else {
         try {
@@ -169,7 +195,6 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, type: "chat" }),
       });
-      // Handle non-200 responses
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
@@ -178,14 +203,15 @@
       return result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
     }
 
-    async function generateImageFromPrompt(prompt) {
+    // دالة tryGenerateImage المدمجة
+    async function tryGenerateImage(translatedText, originalPrompt) {
+      // هذه الدالة ستتصل بدالة Netlify (chat.js) التي بدورها تتصل بـ Gemini API
       const response = await fetch("/.netlify/functions/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: prompt, type: "image" }),
+        body: JSON.stringify({ message: translatedText, type: "image" }), // نرسل النص المترجم هنا
       });
 
-      // Handle non-200 responses
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
@@ -196,13 +222,29 @@
       if (result.image) {
         return `data:image/png;base64,${result.image}`;
       } else if (result.uri) {
-        // If the API returns a URI, use it. This might be a temporary external link.
         return result.uri;
       } else {
-        // This case should ideally not be reached if the Netlify function always returns an image or uri
         throw new Error("لم يتم توليد صورة أو الاستجابة فارغة من الخادم");
       }
     }
+    
+    // ترجمة النص إلى الإنجليزية - تم تعديلها لاستخدام Google Translate API مباشرة
+    async function translateToEnglish(text) {
+        const encodedText = encodeURIComponent(text);
+        const translationUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodedText}`;
+        
+        try {
+            const response = await fetch(translationUrl);
+            const data = await response.json();
+            return data[0][0][0];
+        } catch (error) {
+            console.error('Translation error:', error);
+            throw new Error('فشل في ترجمة النص');
+        }
+    }
+
+    // --- نهاية منطق توليد الصور المدمج ---
+
   </script>
 
 </body>
