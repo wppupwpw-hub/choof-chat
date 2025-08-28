@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>شات بوت ذكي مع صور</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- إضافة مكتبة marked.js لتحويل Markdown إلى HTML -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.10/marked.min.js"></script>
   <style>
     body {
       font-family: 'Inter', Tahoma, sans-serif;
@@ -44,6 +46,22 @@
       float: left;
       clear: both;
     }
+    /* تنسيقات Markdown أساسية لضمان ظهور النص الغامق */
+    .bot strong {
+        font-weight: bold;
+    }
+    .bot em {
+        font-style: italic;
+    }
+    .bot ul, .bot ol {
+        padding-right: 20px;
+        list-style-position: inside;
+    }
+    .bot li {
+        margin-bottom: 5px;
+    }
+    /* نهاية تنسيقات Markdown */
+
     #input-area {
       display: flex;
       padding: 10px;
@@ -94,7 +112,7 @@
 
     /* --- أنماط النافذة المنبثقة (Modal) --- */
     .image-modal {
-      display: none; /* هذا السطر هو الإصلاح. يجب أن تكون مخفية افتراضيًا */
+      display: none;
       position: fixed;
       z-index: 1000;
       left: 0;
@@ -103,8 +121,6 @@
       height: 100%;
       overflow: auto;
       background-color: rgba(0,0,0,0.8);
-      /* تمت إزالة `display: flex; align-items: center; justify-content: center;` هنا
-         لأن `display: none;` سيخفيها. سيتم إضافتها بواسطة JS عند الحاجة. */
       padding: 20px;
     }
 
@@ -119,7 +135,7 @@
       box-shadow: 0 5px 15px rgba(0,0,0,0.3);
       animation-name: animatetop;
       animation-duration: 0.4s;
-      display: flex; /* حافظ على هذه لترتيب المحتوى داخل المودال */
+      display: flex;
       flex-direction: column;
       align-items: center;
     }
@@ -224,13 +240,20 @@
       msg.className = `message ${sender} rounded-xl shadow-sm`;
       if (isHtml) {
         msg.innerHTML = text;
-        // If the content contains an image, add click listener to it
-        const imgElement = msg.querySelector('img.generated');
-        if (imgElement) {
-          imgElement.addEventListener('click', () => openImageModal(imgElement.src));
-        }
       } else {
-        msg.textContent = text;
+        // إذا كان المرسل هو "bot" و النص ليس HTML بالفعل (مثل الصورة)
+        // نقوم بتحويل Markdown إلى HTML
+        if (sender === 'bot') {
+            msg.innerHTML = marked.parse(text);
+        } else {
+            msg.textContent = text;
+        }
+      }
+      
+      // إذا كان هناك صورة في الرسالة (حتى لو تم إنشاؤها عبر Markdown) أضف مستمع النقر
+      const imgElement = msg.querySelector('img.generated');
+      if (imgElement) {
+        imgElement.addEventListener('click', () => openImageModal(imgElement.src));
       }
       chatContainer.appendChild(msg);
       chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -239,7 +262,7 @@
     // Function to open the image modal
     function openImageModal(imageSrc) {
       fullImageDisplay.src = imageSrc;
-      imageViewModal.style.display = 'flex'; // الآن نستخدم flex لجعلها تظهر وتتمركز
+      imageViewModal.style.display = 'flex';
     }
 
     // Function to download the full-size image from the modal
