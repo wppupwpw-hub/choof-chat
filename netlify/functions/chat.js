@@ -20,11 +20,15 @@ export async function handler(event, context) {
         contents: [{ role: "user", parts: [{ text: message }] }]
       };
     } else if (type === "image") {
-      // Using imagen-3.0-generate-002 as specified
-      apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+      // تم التغيير لاستخدام gemini-2.5-flash-image-preview لتوليد الصور
+      apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
       payload = {
-        instances: [{ prompt: message }],
-        parameters: { sampleCount: 1 } // Requesting one image
+        contents: [{
+          parts: [{ text: message }]
+        }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE'] // طلب استجابة تتضمن نص وصورة
+        },
       };
     } else {
       return {
@@ -52,11 +56,11 @@ export async function handler(event, context) {
     const result = await response.json();
 
     if (type === "image") {
-      const base64 = result?.predictions?.[0]?.bytesBase64Encoded || null;
-      const uri = result?.predictions?.[0]?.uri || null;
-
-      if (!base64 && !uri) {
-        console.error("Image generation API did not return base64 or URI:", result);
+      // في حالة gemini-2.5-flash-image-preview، نبحث عن الصورة في candidates[0].content.parts
+      const base64 = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      
+      if (!base64) {
+        console.error("Image generation API did not return base64 data:", result);
         return {
           statusCode: 500,
           body: JSON.stringify({ error: "لم يتم استلام بيانات صورة صالحة من API." }),
@@ -65,7 +69,7 @@ export async function handler(event, context) {
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ image: base64, uri }),
+        body: JSON.stringify({ image: base64, uri: null }), // لا يوجد URI مباشر هنا
       };
     }
 
