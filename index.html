@@ -1,1 +1,220 @@
 
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شات بوت ذكي مع صور (بواسطة Gemini)</title>
+  <!-- Tailwind CSS CDN for styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom styles for the chat interface */
+    body {
+      font-family: 'Inter', Tahoma, sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      background: #fff;
+      border-bottom: 1px solid #ccc;
+      border-radius: 0.75rem 0.75rem 0 0; /* Top rounded corners */
+    }
+    .message {
+      margin: 10px 0;
+      max-width: 70%;
+      padding: 10px;
+      border-radius: 10px;
+      display: inline-block;
+      word-wrap: break-word;
+    }
+    .user {
+      background: #5e72e4;
+      color: #fff;
+      text-align: right;
+      float: right;
+      clear: both;
+    }
+    .bot {
+      background: #eee;
+      color: #000;
+      text-align: left;
+      float: left;
+      clear: both;
+    }
+    #input-area {
+      display: flex;
+      padding: 10px;
+      background: #f1f1f1;
+      border-top: 1px solid #ccc;
+      border-radius: 0 0 0.75rem 0.75rem; /* Bottom rounded corners */
+    }
+    #chat-input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    #send-btn {
+      margin-right: 10px;
+      background: #5e72e4;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s ease-in-out;
+    }
+    #send-btn:hover {
+      background-color: #4a5cbb;
+    }
+    img.generated {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 5px;
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #5e72e4;
+      animation: spin 1s ease infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="flex flex-col h-screen">
+
+  <div id="chat-container" class="flex-1 overflow-y-auto p-4 bg-white border-b border-gray-300 rounded-t-xl shadow-lg"></div>
+
+  <div id="input-area" class="flex p-4 bg-gray-100 border-t border-gray-300 rounded-b-xl shadow-lg">
+    <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." class="flex-1 p-3 border border-gray-400 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200">
+    <button id="send-btn" class="mr-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200">إرسال</button>
+  </div>
+
+  <script>
+    const chatContainer = document.getElementById("chat-container");
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+
+    /**
+     * Adds a message to the chat interface.
+     * @param {string} sender - The sender of the message ("user" or "bot").
+     * @param {string} text - The content of the message (can be HTML).
+     * @param {boolean} isHtml - True if the text contains HTML, false otherwise.
+     */
+    function addMessage(sender, text, isHtml = false) {
+      const msg = document.createElement("div");
+      msg.className = `message ${sender} rounded-xl shadow-sm`;
+      if (isHtml) {
+        msg.innerHTML = text;
+      } else {
+        msg.textContent = text;
+      }
+      chatContainer.appendChild(msg);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    /**
+     * Handles sending user messages and calling the appropriate API (text or image).
+     */
+    async function sendMessage() {
+      const userMessage = input.value.trim();
+      if (!userMessage) return;
+
+      addMessage("user", userMessage);
+      input.value = "";
+
+      // Check if the user is asking for an image based on keywords
+      const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image");
+
+      let loadingMsgDiv;
+      try {
+        // Display a loading message with a spinner while processing
+        loadingMsgDiv = document.createElement("div");
+        loadingMsgDiv.className = `message bot rounded-xl shadow-sm`;
+        loadingMsgDiv.innerHTML = '<span class="spinner"></span> <span>جاري المعالجة...</span>'; // Generic loading message
+        chatContainer.appendChild(loadingMsgDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        let responseContent;
+        if (isImageRequest) {
+          responseContent = await callGeminiProxy({ type: 'image', prompt: userMessage });
+          loadingMsgDiv.remove(); // Remove loading message
+          addMessage("bot", `<img src="${responseContent}" class="generated">`, true);
+        } else {
+          responseContent = await callGeminiProxy({ type: 'text', prompt: userMessage });
+          loadingMsgDiv.remove(); // Remove loading message
+          addMessage("bot", responseContent);
+        }
+      } catch (err) {
+        console.error("API call error:", err);
+        if (loadingMsgDiv) loadingMsgDiv.remove(); // Ensure loading message is removed even on error
+        addMessage("bot", "❌ حدث خطأ أثناء الاتصال بالخادم. يرجى المحاولة مرة أخرى.", true);
+      }
+    }
+
+    /**
+     * Calls the Netlify Function acting as a proxy to the Gemini API.
+     * Implements exponential backoff for retries.
+     * @param {object} requestData - Object containing type ('text' or 'image') and prompt.
+     * @returns {Promise<string>} - The generated text or image URL.
+     */
+    async function callGeminiProxy(requestData) {
+      const proxyUrl = '/.netlify/functions/gemini-proxy'; // Path to the Netlify Function
+
+      let response;
+      let result;
+      const maxRetries = 5;
+      for (let i = 0; i < maxRetries; i++) {
+          try {
+              response = await fetch(proxyUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(requestData)
+              });
+              result = await response.json();
+
+              if (response.ok) {
+                  // Process responses based on type (text or image)
+                  if (requestData.type === 'text') {
+                      return result.candidates[0].content.parts[0].text;
+                  } else if (requestData.type === 'image') {
+                      return `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                  }
+              } else {
+                  // If the proxy itself returns an error, throw it
+                  throw new Error(`Proxy error (${response.status}): ${result.error || JSON.stringify(result)}`);
+              }
+          } catch (error) {
+              console.error(`Attempt ${i + 1} failed:`, error);
+              if (i < maxRetries - 1) {
+                  await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000)); // Exponential backoff
+              } else {
+                  throw error; // Re-throw if all retries fail
+              }
+          }
+      }
+    }
+  </script>
+
+</body>
+</html>
