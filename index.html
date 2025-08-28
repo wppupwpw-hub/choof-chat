@@ -70,6 +70,7 @@
       max-width: 100%;
       border-radius: 10px;
       margin-top: 5px;
+      cursor: pointer;
     }
     .spinner {
       border: 4px solid rgba(0, 0, 0, 0.1);
@@ -90,6 +91,82 @@
       color: red;
       font-weight: bold;
     }
+
+    /* --- أنماط النافذة المنبثقة (Modal) --- */
+    .image-modal {
+      display: none; /* هذا السطر هو الإصلاح. يجب أن تكون مخفية افتراضيًا */
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.8);
+      /* تمت إزالة `display: flex; align-items: center; justify-content: center;` هنا
+         لأن `display: none;` سيخفيها. سيتم إضافتها بواسطة JS عند الحاجة. */
+      padding: 20px;
+    }
+
+    .image-modal-content {
+      position: relative;
+      background-color: #fefefe;
+      margin: auto;
+      padding: 0;
+      border-radius: 10px;
+      max-width: 90%;
+      max-height: 90%;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      animation-name: animatetop;
+      animation-duration: 0.4s;
+      display: flex; /* حافظ على هذه لترتيب المحتوى داخل المودال */
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .image-modal-img {
+      width: 100%;
+      height: auto;
+      max-height: calc(100vh - 120px);
+      object-fit: contain;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .image-modal-close {
+      color: #fff;
+      position: absolute;
+      top: 10px;
+      right: 25px;
+      font-size: 35px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 1001;
+    }
+
+    .image-modal-download-btn {
+      background: #5e72e4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 0 0 10px 10px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      margin-top: -1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .image-modal-download-btn:hover {
+      background: #4a5bb8;
+    }
+
+    @keyframes animatetop {
+      from {top: -300px; opacity: 0}
+      to {top: 0; opacity: 1}
+    }
   </style>
 </head>
 <body>
@@ -101,19 +178,57 @@
     <button id="send-btn" class="mr-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200">إرسال</button>
   </div>
 
+  <!-- Image Modal HTML -->
+  <div id="image-view-modal" class="image-modal">
+    <div class="image-modal-content">
+      <span class="image-modal-close" id="modal-close-btn">&times;</span>
+      <img class="image-modal-img" id="full-image-display" src="" alt="Full size image">
+      <button class="image-modal-download-btn" id="modal-download-btn">
+        <i class="fas fa-download"></i> تحميل الصورة
+      </button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
   <script>
     const chatContainer = document.getElementById("chat-container");
     const input = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
 
+    // Modal elements
+    const imageViewModal = document.getElementById('image-view-modal');
+    const fullImageDisplay = document.getElementById('full-image-display');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalDownloadBtn = document.getElementById('modal-download-btn');
+
     sendBtn.addEventListener("click", sendMessage);
     input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+
+    // Close modal when 'x' is clicked
+    modalCloseBtn.addEventListener('click', () => {
+      imageViewModal.style.display = 'none';
+    });
+
+    // Close modal when clicking outside of the content
+    imageViewModal.addEventListener('click', (event) => {
+      if (event.target === imageViewModal) {
+        imageViewModal.style.display = 'none';
+      }
+    });
+
+    // Download image from modal
+    modalDownloadBtn.addEventListener('click', downloadFullImage);
 
     function addMessage(sender, text, isHtml = false) {
       const msg = document.createElement("div");
       msg.className = `message ${sender} rounded-xl shadow-sm`;
       if (isHtml) {
         msg.innerHTML = text;
+        // If the content contains an image, add click listener to it
+        const imgElement = msg.querySelector('img.generated');
+        if (imgElement) {
+          imgElement.addEventListener('click', () => openImageModal(imgElement.src));
+        }
       } else {
         msg.textContent = text;
       }
@@ -121,7 +236,43 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
-    // --- منطق توليد الصور مدمج من Botdevx.html ---
+    // Function to open the image modal
+    function openImageModal(imageSrc) {
+      fullImageDisplay.src = imageSrc;
+      imageViewModal.style.display = 'flex'; // الآن نستخدم flex لجعلها تظهر وتتمركز
+    }
+
+    // Function to download the full-size image from the modal
+    function downloadFullImage() {
+      const imageUrl = fullImageDisplay.src;
+      if (!imageUrl || imageUrl.startsWith('data:image/png;base64,')) {
+          const a = document.createElement('a');
+          a.href = imageUrl;
+          a.download = `ai-image-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          console.log('تم بدء تحميل الصورة.');
+      } else {
+          fetch(imageUrl)
+              .then(response => response.blob())
+              .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `ai-image-${Date.now()}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                  console.log('تم بدء تحميل الصورة.');
+              })
+              .catch(e => console.error('فشل في تحميل الصورة:', e));
+      }
+    }
+
+
+    // --- منطق توليد الصور مدمج من Botdevx.html (بدون تغيير) ---
     const PROXY_SERVERS = [
       "https://api.allorigins.win/raw?url=",
       "https://corsproxy.io/?",
@@ -130,9 +281,8 @@
     let currentProxyIndex = 0;
     const MAX_RETRIES = 3;
     let retryCount = 0;
-    let isGeneratingImage = false; // لتجنب طلبات متزامنة
+    let isGeneratingImage = false; 
     
-    // API URL الافتراضي. سيتم تعديله في دالة Netlify
     let imageApiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=';
 
     async function sendMessage() {
@@ -142,7 +292,6 @@
       addMessage("user", userMessage);
       input.value = "";
 
-      // Check if the message indicates image generation
       const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
 
       if (isImageRequest) {
@@ -159,10 +308,8 @@
           chatContainer.appendChild(loadingMsgDiv);
           chatContainer.scrollTop = chatContainer.scrollHeight;
 
-          // ترجمة النص إلى الإنجليزية قبل إرساله للـ API
           const translatedPrompt = await translateToEnglish(userMessage);
           
-          // استخدام دالة tryGenerateImage المدمجة
           const imageUrl = await tryGenerateImage(translatedPrompt, userMessage);
           
           loadingMsgDiv.remove(); 
@@ -203,13 +350,11 @@
       return result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
     }
 
-    // دالة tryGenerateImage المدمجة
     async function tryGenerateImage(translatedText, originalPrompt) {
-      // هذه الدالة ستتصل بدالة Netlify (chat.js) التي بدورها تتصل بـ Gemini API
       const response = await fetch("/.netlify/functions/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: translatedText, type: "image" }), // نرسل النص المترجم هنا
+        body: JSON.stringify({ message: translatedText, type: "image" }),
       });
 
       if (!response.ok) {
@@ -228,7 +373,6 @@
       }
     }
     
-    // ترجمة النص إلى الإنجليزية - تم تعديلها لاستخدام Google Translate API مباشرة
     async function translateToEnglish(text) {
         const encodedText = encodeURIComponent(text);
         const translationUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodedText}`;
@@ -242,9 +386,6 @@
             throw new Error('فشل في ترجمة النص');
         }
     }
-
-    // --- نهاية منطق توليد الصور المدمج ---
-
   </script>
 
 </body>
