@@ -172,8 +172,10 @@
 
       if (result.image) {
         return `data:image/png;base64,${result.image}`;
+      } else if (result.uri) {
+        return result.uri;
       } else {
-        throw new Error("لم يتم توليد صورة أو الاستجابة غير صحيحة");
+        throw new Error("لم يتم توليد صورة أو الاستجابة فارغة");
       }
     }
   </script>
