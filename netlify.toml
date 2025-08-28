@@ -1,13 +1,3 @@
-# netlify.toml
-
 [build]
-  # Specifies the directory where Netlify will find your static assets (like index.html).
-  # If your index.html is in the root, you can leave this empty or set to "."
-  publish = "/" 
-  # Specifies the directory where Netlify will look for your serverless functions.
-  functions = "netlify/functions" 
-
-# Optional: Add build command if you have one (e.g., if you were compiling JS/CSS)
-# command = "npm run build" 
-
-# You might want to add redirects or other configurations here later.
+  functions = "netlify/functions"
+  publish = "."
