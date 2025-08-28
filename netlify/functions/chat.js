@@ -2,7 +2,7 @@ export async function handler(event, context) {
   try {
     const { message, type } = JSON.parse(event.body);
 
-    const apiKey = process.env.GEMINI_API_KEY; // متغير البيئة من Netlify
+    const apiKey = process.env.GEMINI_API_KEY;
 
     let apiUrl = "";
     let payload = {};
@@ -28,12 +28,12 @@ export async function handler(event, context) {
 
     const result = await response.json();
 
-    // ✅ لو صورة رجع Base64 فقط
     if (type === "image") {
       const base64 = result?.predictions?.[0]?.bytesBase64Encoded || null;
+      const uri = result?.predictions?.[0]?.uri || null;
       return {
         statusCode: 200,
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ image: base64, uri }),
       };
     }
 
