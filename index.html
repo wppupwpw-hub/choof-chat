@@ -1,19 +1,228 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>شات بوت ذكي</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شات بوت ذكي مع صور</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', Tahoma, sans-serif; /* Using Inter font */
+      background: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      background: #fff;
+      border-bottom: 1px solid #ccc;
+    }
+    .message {
+      margin: 10px 0;
+      max-width: 70%;
+      padding: 10px;
+      border-radius: 10px;
+      display: inline-block;
+      word-wrap: break-word;
+    }
+    .user {
+      background: #5e72e4;
+      color: #fff;
+      text-align: right;
+      float: right;
+      clear: both;
+    }
+    .bot {
+      background: #eee;
+      color: #000;
+      text-align: left;
+      float: left;
+      clear: both;
+    }
+    #input-area {
+      display: flex;
+      padding: 10px;
+      background: #f1f1f1;
+      border-top: 1px solid #ccc;
+    }
+    #chat-input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    #send-btn {
+      margin-right: 10px;
+      background: #5e72e4;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    img.generated {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 5px;
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #5e72e4;
+      animation: spin 1s ease infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+
   <div id="chat-container"></div>
 
-  <div id="input-area">
-    <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." />
-    <button id="send-btn">إرسال</button>
+  <div id="input-area" class="flex p-4 bg-gray-100 border-t border-gray-300 rounded-b-lg">
+    <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." class="flex-1 p-3 border border-gray-400 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200">
+    <button id="send-btn" class="mr-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200">إرسال</button>
   </div>
 
-  <script src="script.js"></script>
+  <script>
+    const chatContainer = document.getElementById("chat-container");
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+
+    function addMessage(sender, text, isHtml = false) {
+      const msg = document.createElement("div");
+      msg.className = `message ${sender} rounded-xl shadow-sm`;
+      if (isHtml) {
+        msg.innerHTML = text;
+      } else {
+        msg.textContent = text;
+      }
+      chatContainer.appendChild(msg);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const userMessage = input.value.trim();
+      if (!userMessage) return;
+
+      addMessage("user", userMessage);
+      input.value = "";
+
+      // تحقق إذا طلب المستخدم صورة
+      if (userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image")) {
+        let loadingMsgDiv;
+        try {
+          // عرض رسالة تحميل مع مؤشر دوران
+          loadingMsgDiv = document.createElement("div");
+          loadingMsgDiv.className = `message bot rounded-xl shadow-sm`;
+          loadingMsgDiv.innerHTML = '<span class="spinner"></span> <span>جاري إنشاء الصورة...</span>';
+          chatContainer.appendChild(loadingMsgDiv);
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+
+          const imageUrl = await generateImageFromPrompt(userMessage);
+          loadingMsgDiv.remove(); // إزالة رسالة التحميل
+          addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
+        } catch (err) {
+          console.error("Image generation error:", err);
+          if (loadingMsgDiv) loadingMsgDiv.remove();
+          addMessage("bot", "❌ حدث خطأ أثناء إنشاء الصورة.", true);
+        }
+      } else {
+        // الدردشة النصية
+        try {
+          const botReply = await chatWithBot(userMessage);
+          addMessage("bot", botReply);
+        } catch (err) {
+          console.error("Chat with bot error:", err);
+          addMessage("bot", "❌ تعذر الاتصال بالخادم.", true);
+        }
+      }
+    }
+
+    // قم بتغيير "ضع_مفتاح_API_الخاص_بك_هنا" إلى مفتاح Gemini API الحقيقي الخاص بك
+    // احذر: هذا يكشف مفتاح الـ API الخاص بك في الكود المصدري.
+    // للاستخدام في الإنتاج، يفضل استخدام متغيرات البيئة من جانب الخادم أو وكيل (proxy).
+    const GEMINI_API_KEY = "AIzaSyB4-24VRAf7rJLWaoB_QLC6PWZEfzlyFMc"; 
+
+    // دالة للدردشة باستخدام Gemini API (توليد النص)
+    async function chatWithBot(message) {
+      const chatHistory = [];
+      chatHistory.push({ role: "user", parts: [{ text: message }] });
+      const payload = { contents: chatHistory };
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`;
+
+      let response;
+      let result;
+      for (let i = 0; i < 5; i++) { // التراجع الأسي مع 5 محاولات
+          try {
+              response = await fetch(apiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+              });
+              result = await response.json();
+              if (response.ok && result.candidates && result.candidates.length > 0) {
+                  return result.candidates[0].content.parts[0].text;
+              } else {
+                  throw new Error(`API error: ${JSON.stringify(result)}`);
+              }
+          } catch (error) {
+              if (i < 4) { // لا تنتظر بعد المحاولة الأخيرة
+                  await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
+              } else {
+                  throw error; // أعد رمي الخطأ إذا فشلت جميع المحاولات
+              }
+          }
+      }
+    }
+
+    // دالة لتوليد الصورة باستخدام Gemini API (توليد الصور)
+    async function generateImageFromPrompt(prompt) {
+      const payload = { instances: { prompt: prompt }, parameters: { "sampleCount": 1} };
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_API_KEY}`;
+
+      let response;
+      let result;
+      for (let i = 0; i < 5; i++) { // التراجع الأسي مع 5 محاولات
+          try {
+              response = await fetch(apiUrl, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+              });
+              result = await response.json();
+              if (response.ok && result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                  return `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+              } else {
+                  throw new Error(`API error: ${JSON.stringify(result)}`);
+              }
+          } catch (error) {
+              if (i < 4) { // لا تنتظر بعد المحاولة الأخيرة
+                  await new Promise(res => setTimeout(res, Math.pow(2, i) * 1000));
+              } else {
+                  throw error; // أعد رمي الخطأ إذا فشلت جميع المحاولات
+              }
+          }
+      }
+    }
+  </script>
+
 </body>
 </html>
