@@ -86,13 +86,17 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    .error-message {
+      color: red;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
 
   <div id="chat-container"></div>
 
-  <div id="input-area">
+  <div id="input-area" class="flex p-4 bg-gray-100 border-t border-gray-300 items-center">
     <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." class="flex-1 p-3 border border-gray-400 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200">
     <button id="send-btn" class="mr-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200">إرسال</button>
   </div>
@@ -124,7 +128,10 @@
       addMessage("user", userMessage);
       input.value = "";
 
-      if (userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image")) {
+      // Check if the message indicates image generation
+      const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
+
+      if (isImageRequest) {
         let loadingMsgDiv;
         try {
           loadingMsgDiv = document.createElement("div");
@@ -134,12 +141,16 @@
           chatContainer.scrollTop = chatContainer.scrollHeight;
 
           const imageUrl = await generateImageFromPrompt(userMessage);
-          loadingMsgDiv.remove();
-          addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
+          loadingMsgDiv.remove(); // Remove loading message after image is generated or failed
+          if (imageUrl) {
+            addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
+          } else {
+            addMessage("bot", "❌ لم نتمكن من إنشاء الصورة. يرجى المحاولة مرة أخرى.", true);
+          }
         } catch (err) {
           console.error("Image generation error:", err);
-          if (loadingMsgDiv) loadingMsgDiv.remove();
-          addMessage("bot", "❌ حدث خطأ أثناء إنشاء الصورة.", true);
+          if (loadingMsgDiv) loadingMsgDiv.remove(); // Ensure loading message is removed on error
+          addMessage("bot", `❌ حدث خطأ أثناء إنشاء الصورة: ${err.message || "خطأ غير معروف"}.`, true);
         }
       } else {
         try {
@@ -158,6 +169,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message, type: "chat" }),
       });
+      // Handle non-200 responses
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
       const result = await response.json();
       return result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
     }
@@ -168,14 +184,23 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: prompt, type: "image" }),
       });
+
+      // Handle non-200 responses
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+
       const result = await response.json();
 
       if (result.image) {
         return `data:image/png;base64,${result.image}`;
       } else if (result.uri) {
+        // If the API returns a URI, use it. This might be a temporary external link.
         return result.uri;
       } else {
-        throw new Error("لم يتم توليد صورة أو الاستجابة فارغة");
+        // This case should ideally not be reached if the Netlify function always returns an image or uri
+        throw new Error("لم يتم توليد صورة أو الاستجابة فارغة من الخادم");
       }
     }
   </script>
