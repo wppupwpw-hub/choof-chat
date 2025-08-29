@@ -15,7 +15,8 @@
       padding: 0;
       display: flex;
       flex-direction: column;
-      height: 100vh;
+      /* تم تغيير الارتفاع هنا لتقليل طول الواجهة */
+      height: 95vh; /* كان 100vh */
     }
     #chat-container {
       flex: 1;
@@ -212,7 +213,7 @@
     const input = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
 
-    // Modal elements
+    // عناصر النافذة المنبثقة (Modal)
     const imageViewModal = document.getElementById('image-view-modal');
     const fullImageDisplay = document.getElementById('full-image-display');
     const modalCloseBtn = document.getElementById('modal-close-btn');
@@ -221,19 +222,19 @@
     sendBtn.addEventListener("click", sendMessage);
     input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
 
-    // Close modal when 'x' is clicked
+    // إغلاق النافذة المنبثقة عند النقر على 'x'
     modalCloseBtn.addEventListener('click', () => {
       imageViewModal.style.display = 'none';
     });
 
-    // Close modal when clicking outside of the content
+    // إغلاق النافذة المنبثقة عند النقر خارج المحتوى
     imageViewModal.addEventListener('click', (event) => {
       if (event.target === imageViewModal) {
         imageViewModal.style.display = 'none';
       }
     });
 
-    // Download image from modal
+    // تنزيل الصورة من النافذة المنبثقة
     modalDownloadBtn.addEventListener('click', downloadFullImage);
 
     function addMessage(sender, text, isHtml = false) {
@@ -260,13 +261,13 @@
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
-    // Function to open the image modal
+    // دالة لفتح نافذة الصورة المنبثقة
     function openImageModal(imageSrc) {
       fullImageDisplay.src = imageSrc;
       imageViewModal.style.display = 'flex'; // الآن نستخدم flex لجعلها تظهر وتتمركز
     }
 
-    // Function to download the full-size image from the modal
+    // دالة لتنزيل الصورة بالحجم الكامل من النافذة المنبثقة
     function downloadFullImage() {
       const imageUrl = fullImageDisplay.src;
       if (!imageUrl || imageUrl.startsWith('data:image/png;base64,')) {
@@ -318,7 +319,7 @@
       addMessage("user", userMessage);
       input.value = "";
 
-      // Check if the message indicates image generation
+      // التحقق مما إذا كانت الرسالة تشير إلى توليد صورة
       const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
 
       if (isImageRequest) {
