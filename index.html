@@ -200,7 +200,7 @@
     });
     modalDownloadBtn.addEventListener('click', downloadFullImage);
 
-    // ✅ دالة addMessage المعدلة
+    // ✅ addMessage تدعم الرموز
     function addMessage(sender, text, isHtml = false) {
       const msg = document.createElement("div");
       msg.className = `message ${sender} rounded-xl shadow-sm`;
@@ -213,9 +213,9 @@
         }
       } else {
         if (sender === "user") {
-          msg.textContent = text; // نص المستخدم آمن
+          msg.textContent = text; // آمن للمستخدم
         } else {
-          msg.innerHTML = text;   // البوت يدعم الرموز ✅❌✨
+          msg.innerHTML = text;   // البوت يعرض رموز ✅❌✨
         }
       }
       chatContainer.appendChild(msg);
@@ -236,18 +236,36 @@
       document.body.removeChild(a);
     }
 
-    // --- منطق API (كما عندك سابقاً) ---
+    // ✅ دالة sendMessage مع استدعاء السيرفر
     async function sendMessage() {
       const userMessage = input.value.trim();
       if (!userMessage) return;
+
+      // عرض رسالة المستخدم
       addMessage("user", userMessage);
       input.value = "";
 
-      // مثال: رد بسيط من البوت
-      if (userMessage.includes("مرحبا")) {
-        addMessage("bot", "أهلاً بك 👋😊");
-      } else {
-        addMessage("bot", "✅ تم استلام رسالتك.");
+      try {
+        const response = await fetch("/.netlify/functions/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: userMessage, type: "chat" }),
+        });
+
+        if (!response.ok) {
+          addMessage("bot", "❌ حدث خطأ في الخادم.");
+          return;
+        }
+
+        const result = await response.json();
+        const botReply = result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
+
+        // عرض رد البوت
+        addMessage("bot", botReply);
+
+      } catch (err) {
+        console.error("Chat error:", err);
+        addMessage("bot", "❌ تعذر الاتصال بالخادم.");
       }
     }
   </script>
