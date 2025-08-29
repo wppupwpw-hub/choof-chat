@@ -43,9 +43,8 @@ export async function handler(event, context) {
       body: JSON.stringify(payload),
     });
 
-    // Check if the API call itself was successful (e.g., status 200)
     if (!response.ok) {
-      const errorText = await response.text(); // Get the raw error text for debugging
+      const errorText = await response.text();
       console.error(`API Error Response (${response.status}):`, errorText);
       return {
         statusCode: response.status,
@@ -56,7 +55,6 @@ export async function handler(event, context) {
     const result = await response.json();
 
     if (type === "image") {
-      // في حالة gemini-2.5-flash-image-preview، نبحث عن الصورة في candidates[0].content.parts
       const base64 = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
       
       if (!base64) {
@@ -69,7 +67,7 @@ export async function handler(event, context) {
 
       return {
         statusCode: 200,
-        body: JSON.stringify({ image: base64, uri: null }), // لا يوجد URI مباشر هنا
+        body: JSON.stringify({ image: base64, uri: null }),
       };
     }
 
