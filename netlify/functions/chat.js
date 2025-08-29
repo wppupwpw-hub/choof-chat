@@ -1,13 +1,12 @@
-// netlify/functions/chat.js
-
 export async function handler(event, context) {
   try {
     const { message, type } = JSON.parse(event.body);
 
-    // مفتاح Gemini
+    // هذا المفتاح لن يُستخدم لطلبات الصور إذا استخدمنا API Botdevx.html
+    // ولكنه سيظل مطلوبًا لطلبات الدردشة العادية مع Gemini Chat API.
     const apiKey = process.env.GEMINI_API_KEY;
 
-    // عنوان API لتوليد الصور
+    // عنوان API لتوليد الصور من Botdevx.html
     const BOTDEVX_IMAGE_API_URL = 'http://23.95.85.59/ai/image.php';
     const PROXY_SERVERS = [
       "https://api.allorigins.win/raw?url=",
@@ -19,119 +18,79 @@ export async function handler(event, context) {
     let payload = {};
     let isImageGeneration = false;
 
-    // ----- حالة الدردشة -----
     if (type === "chat") {
       if (!apiKey) {
-        // رد تجريبي في حال عدم وجود مفتاح
         return {
-          statusCode: 200,
-          body: JSON.stringify({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    { text: "🤖 هذا رد تجريبي بدون مفتاح API." }
-                  ]
-                }
-              }
-            ]
-          }),
+          statusCode: 500,
+          body: JSON.stringify({ error: "GEMINI_API_KEY غير متاح لخدمة الدردشة." }),
         };
       }
-
       apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
       payload = {
         contents: [{ role: "user", parts: [{ text: message }] }]
       };
-    } 
-    
-    // ----- حالة توليد الصور -----
-    else if (type === "image") {
+    } else if (type === "image") {
       isImageGeneration = true;
-
+      
+      // بناء رابط API لـ Botdevx.html مع المعلمات
       const params = new URLSearchParams();
-      params.append('text', message);
-      params.append('quality', 'high');
-      params.append('size', '512x512');
-
+      params.append('text', message); // message هنا هو الوصف المترجم
+      params.append('quality', 'high'); // يمكن جعل هذا ديناميكيًا إذا أردت
+      params.append('size', '512x512'); // يمكن جعل هذا ديناميكيًا إذا أردت
+      
       const targetApiUrl = `${BOTDEVX_IMAGE_API_URL}?${params.toString()}`;
+      
+      // استخدام خوادم البروكسي لتجاوز مشاكل CORS
+      // نختار البروكسي الأول، ويمكنك إضافة منطق لتبديل البروكسي إذا فشل الأول
       const proxyUrl = PROXY_SERVERS[0];
       apiUrl = proxyUrl + encodeURIComponent(targetApiUrl);
-
-      payload = null;
-    } 
-    
-    // ----- نوع غير صالح -----
-    else {
+      
+      // لا نحتاج إلى payload مباشر لـ fetch لأنه سيتم التعامل معه من قبل API الوسيط
+      payload = null; // سيتم تمرير المعلمات في الـ URL
+      
+    } else {
       return {
         statusCode: 400,
-        body: JSON.stringify({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  { text: "❌ نوع الطلب غير صالح." }
-                ]
-              }
-            }
-          ]
-        }),
+        body: JSON.stringify({ error: "نوع طلب غير صالح." }),
       };
     }
 
-    // إعداد الخيارات
     const fetchOptions = {
-      method: payload ? "POST" : "GET",
-      headers: {},
+      method: "GET", // API Botdevx.html غالبًا يستخدم GET للصور
+      headers: {
+        // لا نحتاج إلى Content-Type: application/json إذا كان payload فارغًا
+        // وقد تحتاج لإضافة Origin أو Referer إذا كان API يتطلب ذلك
+      },
     };
 
-    if (payload) {
+    if (payload) { // فقط لطلبات الدردشة
+      fetchOptions.method = "POST";
       fetchOptions.headers["Content-Type"] = "application/json";
       fetchOptions.body = JSON.stringify(payload);
     }
-
-    // تنفيذ الطلب
+    
     const response = await fetch(apiUrl, fetchOptions);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`API Error (${response.status}):`, errorText);
+      console.error(`API Error Response (${response.status}):`, errorText);
       return {
         statusCode: response.status,
-        body: JSON.stringify({
-          candidates: [
-            {
-              content: {
-                parts: [
-                  { text: `❌ خطأ من API: ${errorText}` }
-                ]
-              }
-            }
-          ]
-        }),
+        body: JSON.stringify({ error: `خطأ من API توليد الصورة: ${errorText}` }),
       };
     }
 
-    // ----- لو طلب صورة -----
     if (isImageGeneration) {
+      // API Botdevx.html يُرجع blob مباشرة
       const imageBlob = await response.blob();
       const arrayBuffer = await imageBlob.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString('base64');
 
       if (!base64) {
+        console.error("Image generation API did not return base64 data.");
         return {
           statusCode: 500,
-          body: JSON.stringify({
-            candidates: [
-              {
-                content: {
-                  parts: [
-                    { text: "❌ لم يتم استلام بيانات صورة صالحة." }
-                  ]
-                }
-              }
-            ]
-          }),
+          body: JSON.stringify({ error: "لم يتم استلام بيانات صورة صالحة من API." }),
         };
       }
 
@@ -141,28 +100,17 @@ export async function handler(event, context) {
       };
     }
 
-    // ----- لو طلب دردشة -----
+    // لطلبات الدردشة، نُرجع النتيجة كما هي من Gemini API
     const result = await response.json();
     return {
       statusCode: 200,
       body: JSON.stringify(result),
     };
-
   } catch (error) {
     console.error("Function execution error:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        candidates: [
-          {
-            content: {
-              parts: [
-                { text: `❌ خطأ داخلي في الخادم: ${error.message}` }
-              ]
-            }
-          }
-        ]
-      }),
+      body: JSON.stringify({ error: `خطأ داخلي في الخادم: ${error.message}` }),
     };
   }
 }
