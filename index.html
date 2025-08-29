@@ -94,7 +94,7 @@
 
     /* --- أنماط النافذة المنبثقة (Modal) --- */
     .image-modal {
-      display: none;
+      display: none; /* هذا السطر هو الإصلاح. يجب أن تكون مخفية افتراضيًا */
       position: fixed;
       z-index: 1000;
       left: 0;
@@ -103,8 +103,11 @@
       height: 100%;
       overflow: auto;
       background-color: rgba(0,0,0,0.8);
+      /* تمت إزالة `display: flex; align-items: center; justify-content: center;` هنا
+         لأن `display: none;` سيخفيها. سيتم إضافتها بواسطة JS عند الحاجة. */
       padding: 20px;
     }
+
     .image-modal-content {
       position: relative;
       background-color: #fefefe;
@@ -114,10 +117,13 @@
       max-width: 90%;
       max-height: 90%;
       box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-      display: flex;
+      animation-name: animatetop;
+      animation-duration: 0.4s;
+      display: flex; /* حافظ على هذه لترتيب المحتوى داخل المودال */
       flex-direction: column;
       align-items: center;
     }
+
     .image-modal-img {
       width: 100%;
       height: auto;
@@ -125,6 +131,7 @@
       object-fit: contain;
       border-radius: 10px 10px 0 0;
     }
+
     .image-modal-close {
       color: #fff;
       position: absolute;
@@ -135,6 +142,7 @@
       cursor: pointer;
       z-index: 1001;
     }
+
     .image-modal-download-btn {
       background: #5e72e4;
       color: white;
@@ -150,8 +158,14 @@
       justify-content: center;
       gap: 8px;
     }
+
     .image-modal-download-btn:hover {
       background: #4a5bb8;
+    }
+
+    @keyframes animatetop {
+      from {top: -300px; opacity: 0}
+      to {top: 0; opacity: 1}
     }
   </style>
 </head>
@@ -190,84 +204,189 @@
     sendBtn.addEventListener("click", sendMessage);
     input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
 
+    // Close modal when 'x' is clicked
     modalCloseBtn.addEventListener('click', () => {
       imageViewModal.style.display = 'none';
     });
+
+    // Close modal when clicking outside of the content
     imageViewModal.addEventListener('click', (event) => {
       if (event.target === imageViewModal) {
         imageViewModal.style.display = 'none';
       }
     });
+
+    // Download image from modal
     modalDownloadBtn.addEventListener('click', downloadFullImage);
 
-    // ✅ addMessage تدعم الرموز
     function addMessage(sender, text, isHtml = false) {
       const msg = document.createElement("div");
       msg.className = `message ${sender} rounded-xl shadow-sm`;
-
       if (isHtml) {
         msg.innerHTML = text;
+        // If the content contains an image, add click listener to it
         const imgElement = msg.querySelector('img.generated');
         if (imgElement) {
           imgElement.addEventListener('click', () => openImageModal(imgElement.src));
         }
       } else {
-        if (sender === "user") {
-          msg.textContent = text; // آمن للمستخدم
-        } else {
-          msg.innerHTML = text;   // البوت يعرض رموز ✅❌✨
-        }
+        msg.textContent = text;
       }
       chatContainer.appendChild(msg);
       chatContainer.scrollTop = chatContainer.scrollHeight;
     }
 
+    // Function to open the image modal
     function openImageModal(imageSrc) {
       fullImageDisplay.src = imageSrc;
-      imageViewModal.style.display = 'flex';
-    }
-    function downloadFullImage() {
-      const imageUrl = fullImageDisplay.src;
-      const a = document.createElement('a');
-      a.href = imageUrl;
-      a.download = `ai-image-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      imageViewModal.style.display = 'flex'; // الآن نستخدم flex لجعلها تظهر وتتمركز
     }
 
-    // ✅ دالة sendMessage مع استدعاء السيرفر
+    // Function to download the full-size image from the modal
+    function downloadFullImage() {
+      const imageUrl = fullImageDisplay.src;
+      if (!imageUrl || imageUrl.startsWith('data:image/png;base64,')) {
+          const a = document.createElement('a');
+          a.href = imageUrl;
+          a.download = `ai-image-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          console.log('تم بدء تحميل الصورة.');
+      } else {
+          fetch(imageUrl)
+              .then(response => response.blob())
+              .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `ai-image-${Date.now()}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                  console.log('تم بدء تحميل الصورة.');
+              })
+              .catch(e => console.error('فشل في تحميل الصورة:', e));
+      }
+    }
+
+
+    // --- منطق توليد الصور مدمج من Botdevx.html (بدون تغيير) ---
+    const PROXY_SERVERS = [
+      "https://api.allorigins.win/raw?url=",
+      "https://corsproxy.io/?",
+      "https://api.codetabs.com/v1/proxy/?quest="
+    ];
+    let currentProxyIndex = 0;
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let isGeneratingImage = false; 
+    
+    let imageApiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=';
+
     async function sendMessage() {
       const userMessage = input.value.trim();
       if (!userMessage) return;
 
-      // عرض رسالة المستخدم
       addMessage("user", userMessage);
       input.value = "";
 
-      try {
-        const response = await fetch("/.netlify/functions/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userMessage, type: "chat" }),
-        });
+      const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
 
-        if (!response.ok) {
-          addMessage("bot", "❌ حدث خطأ في الخادم.");
-          return;
+      if (isImageRequest) {
+        if (isGeneratingImage) {
+            addMessage("bot", "يرجى الانتظار حتى تكتمل الصورة الحالية قبل طلب أخرى.", true);
+            return;
         }
+        isGeneratingImage = true;
+        let loadingMsgDiv;
+        try {
+          loadingMsgDiv = document.createElement("div");
+          loadingMsgDiv.className = `message bot rounded-xl shadow-sm`;
+          loadingMsgDiv.innerHTML = '<span class="spinner"></span> <span>جاري إنشاء الصورة...</span>';
+          chatContainer.appendChild(loadingMsgDiv);
+          chatContainer.scrollTop = chatContainer.scrollHeight;
 
-        const result = await response.json();
-        const botReply = result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
-
-        // عرض رد البوت
-        addMessage("bot", botReply);
-
-      } catch (err) {
-        console.error("Chat error:", err);
-        addMessage("bot", "❌ تعذر الاتصال بالخادم.");
+          const translatedPrompt = await translateToEnglish(userMessage);
+          
+          const imageUrl = await tryGenerateImage(translatedPrompt, userMessage);
+          
+          loadingMsgDiv.remove(); 
+          if (imageUrl) {
+            addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
+          } else {
+            addMessage("bot", "❌ لم نتمكن من إنشاء الصورة. يرجى المحاولة مرة أخرى.", true);
+          }
+        } catch (err) {
+          console.error("Image generation error:", err);
+          if (loadingMsgDiv) loadingMsgDiv.remove(); 
+          addMessage("bot", `❌ حدث خطأ أثناء إنشاء الصورة: ${err.message || "خطأ غير معروف"}.`, true);
+        } finally {
+            isGeneratingImage = false;
+        }
+      } else {
+        try {
+          const botReply = await chatWithBot(userMessage);
+          addMessage("bot", botReply);
+        } catch (err) {
+          console.error("Chat with bot error:", err);
+          addMessage("bot", "❌ تعذر الاتصال بالخادم.", true);
+        }
       }
     }
+
+    async function chatWithBot(message) {
+      const response = await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, type: "chat" }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+      const result = await response.json();
+      return result.candidates?.[0]?.content?.parts?.[0]?.text || "❌ لا يوجد رد";
+    }
+
+    async function tryGenerateImage(translatedText, originalPrompt) {
+      const response = await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: translatedText, type: "image" }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.image) {
+        return `data:image/png;base64,${result.image}`;
+      } else if (result.uri) {
+        return result.uri;
+      } else {
+        throw new Error("لم يتم توليد صورة أو الاستجابة فارغة من الخادم");
+      }
+    }
+    
+    async function translateToEnglish(text) {
+        const encodedText = encodeURIComponent(text);
+        const translationUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodedText}`;
+        
+        try {
+            const response = await fetch(translationUrl);
+            const data = await response.json();
+            return data[0][0][0];
+        } catch (error) {
+            console.error('Translation error:', error);
+            throw new Error('فشل في ترجمة النص');
+        }
+    }
   </script>
+
 </body>
 </html>
