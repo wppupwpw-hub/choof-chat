@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شات بوت ذكي </title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ✅ مكتبة لتحويل Markdown إلى HTML -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', Tahoma, sans-serif;
+      background: #f7f7f7;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      background: #fff;
+      border-bottom: 1px solid #ccc;
+    }
+    .message {
+      margin: 10px 0;
+      max-width: 70%;
+      padding: 10px;
+      border-radius: 10px;
+      display: inline-block;
+      word-wrap: break-word;
+    }
+    .user {
+      background: #5e72e4;
+      color: #fff;
+      text-align: right;
+      float: right;
+      clear: both;
+    }
+    .bot {
+      background: #eee;
+      color: #000;
+      text-align: left;
+      float: left;
+      clear: both;
+    }
+    /* تنسيقات Markdown أساسية لضمان ظهور النص الغامق */
+    .bot strong {
+        font-weight: bold;
+    }
+    .bot em {
+        font-style: italic;
+    }
+    .bot ul, .bot ol {
+        padding-right: 20px; /* للغة العربية */
+        list-style-position: inside;
+    }
+    .bot li {
+        margin-bottom: 5px;
+    }
+    /* نهاية تنسيقات Markdown */
+
+    #input-area {
+      display: flex;
+      padding: 10px;
+      background: #f1f1f1;
+      border-top: 1px solid #ccc;
+    }
+    #chat-input {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    #send-btn {
+      margin-right: 10px;
+      background: #5e72e4;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    /* أنماط الصور والسبينر */
+    img.generated {
+      max-width: 100%;
+      border-radius: 10px;
+      margin-top: 5px;
+      cursor: pointer; /* لجعل الصورة قابلة للنقر */
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #5e72e4;
+      animation: spin 1s ease infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error-message {
+      color: red;
+      font-weight: bold;
+    }
+
+    /* --- أنماط النافذة المنبثقة (Modal) --- */
+    .image-modal {
+      display: none; /* هذا السطر هو الإصلاح. يجب أن تكون مخفية افتراضيًا */
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.8);
+      padding: 20px;
+    }
+
+    .image-modal-content {
+      position: relative;
+      background-color: #fefefe;
+      margin: auto;
+      padding: 0;
+      border-radius: 10px;
+      max-width: 90%;
+      max-height: 90%;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      animation-name: animatetop;
+      animation-duration: 0.4s;
+      display: flex; /* حافظ على هذه لترتيب المحتوى داخل المودال */
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .image-modal-img {
+      width: 100%;
+      height: auto;
+      max-height: calc(100vh - 120px);
+      object-fit: contain;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .image-modal-close {
+      color: #fff;
+      position: absolute;
+      top: 10px;
+      right: 25px;
+      font-size: 35px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 1001;
+    }
+
+    .image-modal-download-btn {
+      background: #5e72e4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 0 0 10px 10px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      margin-top: -1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .image-modal-download-btn:hover {
+      background: #4a5bb8;
+    }
+
+    @keyframes animatetop {
+      from {top: -300px; opacity: 0}
+      to {top: 0; opacity: 1}
+    }
+  </style>
+</head>
+<body>
+
+  <div id="chat-container"></div>
+
+  <div id="input-area" class="flex p-4 bg-gray-100 border-t border-gray-300 items-center">
+    <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." class="flex-1 p-3 border border-gray-400 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200">
+    <button id="send-btn" class="mr-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200">إرسال</button>
+  </div>
+
+  <!-- Image Modal HTML -->
+  <div id="image-view-modal" class="image-modal">
+    <div class="image-modal-content">
+      <span class="image-modal-close" id="modal-close-btn">&times;</span>
+      <img class="image-modal-img" id="full-image-display" src="" alt="Full size image">
+      <button class="image-modal-download-btn" id="modal-download-btn">
+        <i class="fas fa-download"></i> تحميل الصورة
+      </button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+  <script>
+    const chatContainer = document.getElementById("chat-container");
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    // Modal elements
+    const imageViewModal = document.getElementById('image-view-modal');
+    const fullImageDisplay = document.getElementById('full-image-display');
+    const modalCloseBtn = document.getElementById('modal-close-btn');
+    const modalDownloadBtn = document.getElementById('modal-download-btn');
+
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+
+    // Close modal when 'x' is clicked
+    modalCloseBtn.addEventListener('click', () => {
+      imageViewModal.style.display = 'none';
+    });
+
+    // Close modal when clicking outside of the content
+    imageViewModal.addEventListener('click', (event) => {
+      if (event.target === imageViewModal) {
+        imageViewModal.style.display = 'none';
+      }
+    });
+
+    // Download image from modal
+    modalDownloadBtn.addEventListener('click', downloadFullImage);
+
+    function addMessage(sender, text, isHtml = false) {
+      const msg = document.createElement("div");
+      msg.className = `message ${sender} rounded-xl shadow-sm`;
+      if (isHtml) {
+        msg.innerHTML = text;
+      } else {
+        // إذا كان المرسل هو "bot" و النص ليس HTML بالفعل (مثل الصورة)
+        // نقوم بتحويل Markdown إلى HTML
+        if (sender === 'bot') {
+            msg.innerHTML = marked.parse(text);
+        } else {
+            msg.textContent = text;
+        }
+      }
+      
+      // إذا كان هناك صورة في الرسالة (حتى لو تم إنشاؤها عبر Markdown) أضف مستمع النقر
+      const imgElement = msg.querySelector('img.generated');
+      if (imgElement) {
+        imgElement.addEventListener('click', () => openImageModal(imgElement.src));
+      }
+      chatContainer.appendChild(msg);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // Function to open the image modal
+    function openImageModal(imageSrc) {
+      fullImageDisplay.src = imageSrc;
+      imageViewModal.style.display = 'flex'; // الآن نستخدم flex لجعلها تظهر وتتمركز
+    }
+
+    // Function to download the full-size image from the modal
+    function downloadFullImage() {
+      const imageUrl = fullImageDisplay.src;
+      if (!imageUrl || imageUrl.startsWith('data:image/png;base64,')) {
+          const a = document.createElement('a');
+          a.href = imageUrl;
+          a.download = `ai-image-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          console.log('تم بدء تحميل الصورة.');
+      } else {
+          fetch(imageUrl)
+              .then(response => response.blob())
+              .then(blob => {
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `ai-image-${Date.now()}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                  console.log('تم بدء تحميل الصورة.');
+              })
+              .catch(e => console.error('فشل في تحميل الصورة:', e));
+      }
+    }
+
+
+    // --- منطق توليد الصور المدمج من Botdevx.html ---
+    const PROXY_SERVERS = [
+      "https://api.allorigins.win/raw?url=",
+      "https://corsproxy.io/?",
+      "https://api.codetabs.com/v1/proxy/?quest="
+    ];
+    let currentProxyIndex = 0;
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let isGeneratingImage = false; 
+    
+    // هذا المتغير لم يعد يستخدم مباشرة للـ API Key هنا
+    // ولكنه يظل مفيدًا لتتبع ما إذا كنت تستخدم Gemini أو API آخر
+    let imageApiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=';
+
+    async function sendMessage() {
+      const userMessage = input.value.trim();
+      if (!userMessage) return;
+
+      addMessage("user", userMessage);
+      input.value = "";
+
+      // Check if the message indicates image generation
+      const isImageRequest = userMessage.includes("صورة") || userMessage.includes("ارسم") || userMessage.toLowerCase().includes("image") || userMessage.toLowerCase().includes("create an image");
+
+      if (isImageRequest) {
+        if (isGeneratingImage) {
+            addMessage("bot", "يرجى الانتظار حتى تكتمل الصورة الحالية قبل طلب أخرى.", true);
+            return;
+        }
+        isGeneratingImage = true;
+        let loadingMsgDiv;
+        try {
+          loadingMsgDiv = document.createElement("div");
+          loadingMsgDiv.className = `message bot rounded-xl shadow-sm`;
+          loadingMsgDiv.innerHTML = '<span class="spinner"></span> <span>جاري إنشاء الصورة...</span>';
+          chatContainer.appendChild(loadingMsgDiv);
+          chatContainer.scrollTop = chatContainer.scrollHeight;
+
+          const translatedPrompt = await translateToEnglish(userMessage);
+          
+          const imageUrl = await tryGenerateImage(translatedPrompt, userMessage);
+          
+          loadingMsgDiv.remove(); 
+          if (imageUrl) {
+            addMessage("bot", `<img src="${imageUrl}" class="generated">`, true);
+          } else {
+            addMessage("bot", "❌ لم نتمكن من إنشاء الصورة. يرجى المحاولة مرة أخرى.", true);
+          }
+        } catch (err) {
+          console.error("Image generation error:", err);
+          if (loadingMsgDiv) loadingMsgDiv.remove(); 
+          addMessage("bot", `❌ حدث خطأ أثناء إنشاء الصورة: ${err.message || "خطأ غير معروف"}.`, true);
+        } finally {
+            isGeneratingImage = false;
+        }
+      } else {
+        try {
+          const botReply = await chatWithBot(userMessage);
+          addMessage("bot", botReply);
+        } catch (err) {
+          console.error("Chat with bot error:", err);
+          addMessage("bot", "❌ تعذر الاتصال بالخادم.", true);
+        }
+      }
+    }
+
+    // دالة chatWithBot تستخدم دالة Netlify للدردشة النصية
+    async function chatWithBot(message) {
+      const response = await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, type: "chat" }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+      const result = await response.json();
+      // تأكد من أننا ندمج كل الأجزاء النصية إذا كانت الاستجابة متعددة الأجزاء
+      return result.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "❌ لا يوجد رد";
+    }
+
+    // دالة tryGenerateImage تستخدم دالة Netlify لتوليد الصور (التي تتصل بـ Botdevx.html API)
+    async function tryGenerateImage(translatedText, originalPrompt) {
+      const response = await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: translatedText, type: "image" }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`خطأ في الخادم: ${response.status} - ${errorData.error || response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.image) {
+        return `data:image/png;base64,${result.image}`;
+      } else if (result.uri) {
+        return result.uri;
+      } else {
+        throw new Error("لم يتم توليد صورة أو الاستجابة فارغة من الخادم");
+      }
+    }
+    
+    // دالة ترجمة النص إلى الإنجليزية
+    async function translateToEnglish(text) {
+        const encodedText = encodeURIComponent(text);
+        const translationUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodedText}`;
+        
+        try {
+            const response = await fetch(translationUrl);
+            const data = await response.json();
+            return data[0][0][0];
+        } catch (error) {
+            console.error('Translation error:', error);
+            throw new Error('فشل في ترجمة النص');
+        }
+    }
+  </script>
+
+</body>
+</html>
