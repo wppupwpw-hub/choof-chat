@@ -1,77 +1,76 @@
-import { Buffer } from 'buffer'; // استيراد Buffer بشكل صريح لحل مشكلة الخطأ
-
 export async function handler(event, context) {
+  // الرابط الخاص بك
+  const KILWA_CHAT_URL = "http://de3.bot-hosting.net:21007/kilwa-chat";
+
   try {
-    // التحقق من نوع الطلب
+    // 1. التأكد من أن الطلب POST
     if (event.httpMethod !== "POST") {
-      return { 
-        statusCode: 405, 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Method Not Allowed" }) 
-      };
+      return { statusCode: 405, body: "Method Not Allowed" };
     }
 
-    const { message, type } = JSON.parse(event.body);
+    // 2. قراءة الرسالة المرسلة من الموقع
+    const body = JSON.parse(event.body);
+    const userMessage = body.message;
+    const requestType = body.type;
 
-    // الرابط الخاص بك
-    const KILWA_CHAT_URL = "http://de3.bot-hosting.net:21007/kilwa-chat";
-
-    if (type === "chat") {
+    // 3. معالجة طلبات الدردشة النصية
+    if (requestType === "chat") {
       // الاتصال بسيرفر البوت الخاص بك
-      const response = await fetch(`${KILWA_CHAT_URL}?text=${encodeURIComponent(message)}`);
+      const response = await fetch(`${KILWA_CHAT_URL}?text=${encodeURIComponent(userMessage)}`);
       
       if (!response.ok) {
-        throw new Error(`سيرفر البوت أعطى استجابة خاطئة: ${response.status}`);
+        throw new Error("سيرفر البوت لا يستجيب حالياً");
       }
 
-      const rawText = await response.text();
-      let cleanResponseText = rawText;
+      // الحصول على الرد (سواء كان نصاً عادياً أو JSON)
+      const rawData = await response.text();
+      let finalText = rawData;
 
-      // محاولة استخراج النص إذا كان الرد بتنسيق JSON
       try {
-        const jsonData = JSON.parse(rawText);
-        cleanResponseText = jsonData.response || jsonData.text || jsonData.message || rawText;
+        // إذا كان الرد بتنسيق JSON، نستخرج النص منه
+        const jsonData = JSON.parse(rawData);
+        finalText = jsonData.response || jsonData.text || jsonData.message || rawResponse;
       } catch (e) {
-        // الرد نصي مباشر (مثل "أهلاً") - لا نحتاج لتغيير
+        // إذا فشل الـ JSON، يعني أن الرد نصي مباشر وهو المطلوب
       }
 
-      // إرسال الرد بتنسيق متوافق مع واجهة موقعك (candidates structure)
+      // 4. إرسال الرد بتنسيق "نظيف" يفهمه ملف الـ HTML لديك
       return {
         statusCode: 200,
-        headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*" 
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           candidates: [{
             content: {
-              parts: [{ text: cleanResponseText }]
+              parts: [{ text: finalText }]
             }
           }]
-        }),
+        })
       };
-
-    } else if (type === "image") {
-      // منطق توليد الصور
-      const transRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(message)}`);
-      const transData = await transRes.json();
-      const enPrompt = transData[0][0][0];
-
-      const imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enPrompt)}?width=1024&height=1024&seed=${Math.random()}`;
-      
+    } 
+    
+    // 5. معالجة طلبات الصور (اختياري)
+    else if (requestType === "image") {
+      // نستخدم محرك رسم بسيط ومباشر
+      const imgUrl = `https://pollinations.ai/p/${encodeURIComponent(userMessage)}?width=1024&height=1024&seed=${Math.random()}`;
       return {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uri: imageUrl }),
+        body: JSON.stringify({ uri: imgUrl })
       };
     }
 
   } catch (error) {
-    console.error("Function Error:", error);
+    // في حال حدوث أي خطأ، نرسل رسالة واضحة للمستخدم
     return {
-      statusCode: 500,
+      statusCode: 200, // نرسل 200 لتجنب ظهور أخطاء في الكونسول وعرض الخطأ في الشات
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({
+        candidates: [{
+          content: {
+            parts: [{ text: "عذراً، واجهت مشكلة في الاتصال بالسيرفر. تأكد من أن رابط البوت يعمل." }]
+          }
+        }]
+      })
     };
   }
 }
