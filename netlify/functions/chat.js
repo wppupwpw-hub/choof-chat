@@ -1,67 +1,80 @@
+/**
+ * هذا الملف يعمل كـ Serverless Function على Netlify
+ * وظيفته: الاتصال بالبوت الخاص بك، تنظيف الرد من الرموز البرمجية، وإرساله للموقع
+ */
+
 export async function handler(event, context) {
   try {
-    // التأكد من أن الطلب POST
+    // التأكد من أن الطلب POST (المرسل من الموقع)
     if (event.httpMethod !== "POST") {
-      return { statusCode: 405, body: "Method Not Allowed" };
+      return { 
+        statusCode: 405, 
+        body: JSON.stringify({ error: "طريقة الطلب غير مسموحة" }) 
+      };
     }
 
+    // استلام الرسالة ونوعها من واجهة المستخدم
     const { message, type } = JSON.parse(event.body);
 
-    // 1. رابط البوت الخاص بك (للدردشة النصية)
+    // الرابط المباشر للبوت الخاص بك
     const KILWA_CHAT_URL = "http://de3.bot-hosting.net:21007/kilwa-chat";
     
-    // 2. محرك توليد الصور (لطلبات الصور)
-    const IMAGE_GEN_URL = "https://pollinations.ai/p/";
-
     if (type === "chat") {
-      // الاتصال برابط البوت الخاص بك
+      // الاتصال بسيرفر البوت وجلب الرد
       const response = await fetch(`${KILWA_CHAT_URL}?text=${encodeURIComponent(message)}`);
       
       if (!response.ok) {
-        throw new Error(`خطأ من سيرفر البوت: ${response.status}`);
+        throw new Error(`سيرفر البوت لا يستجيب: ${response.status}`);
       }
 
-      // قراءة الرد (سواء كان نصاً مباشراً أو JSON)
-      const rawData = await response.text();
-      let finalMessage = rawData;
+      // قراءة الرد الخام
+      const rawResponse = await response.text();
+      let finalCleanText = rawResponse;
 
+      // محاولة تنظيف الرد إذا كان يحتوي على هيكل JSON
       try {
-        const jsonData = JSON.parse(rawData);
-        finalMessage = jsonData.response || jsonData.text || jsonData.message || rawData;
+        const jsonData = JSON.parse(rawResponse);
+        // استخراج النص من الحقول المحتملة
+        finalCleanText = jsonData.response || jsonData.text || jsonData.message || rawResponse;
       } catch (e) {
-        // الرد نصي عادي، نتركه كما هو
+        // الرد نصي مباشر، لا يحتاج لتغيير
       }
 
+      // إرجاع الرد بتنسيق يفهمه ملف index.html الخاص بك
       return {
         statusCode: 200,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          candidates: [{ content: { parts: [{ text: finalMessage }] } }] 
+          candidates: [{ 
+            content: { 
+              parts: [{ text: finalCleanText }] 
+            } 
+          }] 
         }),
       };
 
     } else if (type === "image") {
-      // منطق توليد الصور (ترجمة النص ثم الرسم)
+      // منطق توليد الصور (عبر مترجم جوجل ثم محرك pollinations)
       const transUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(message)}`;
       const transRes = await fetch(transUrl);
       const transData = await transRes.json();
       const enText = transData[0][0][0];
 
-      const imageUrl = `${IMAGE_GEN_URL}${encodeURIComponent(enText)}?width=1024&height=1024&seed=${Math.random()}`;
+      const imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enText)}?width=1024&height=1024&seed=${Math.random()}`;
       
       return {
         statusCode: 200,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uri: imageUrl }),
       };
     }
-
-    return { statusCode: 400, body: JSON.stringify({ error: "نوع الطلب غير مدعوم" }) };
 
   } catch (error) {
     console.error("Internal Error:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: "حدث خطأ في الخادم: " + error.message }),
     };
   }
 }
