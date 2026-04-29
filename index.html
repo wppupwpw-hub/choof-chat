@@ -1,1 +1,123 @@
 
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شات بوت كيلوا - النسخة المصلحة</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    #chat-container { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+    .message { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 15px; line-height: 1.6; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .user { background: #0084ff; color: white; align-self: flex-start; border-bottom-right-radius: 4px; margin-right: auto; text-align: right; }
+    .bot { background: white; color: #1c1e21; align-self: flex-end; border-bottom-left-radius: 4px; margin-left: auto; border: 1px solid #ddd; text-align: right; }
+    .bot strong { font-weight: bold; }
+    #input-area { background: white; padding: 15px; display: flex; gap: 10px; border-top: 1px solid #ddd; }
+    #chat-input { flex: 1; border: 1px solid #ccd0d5; padding: 12px; border-radius: 25px; outline: none; background: #f0f2f5; transition: border 0.3s; }
+    #chat-input:focus { border-color: #0084ff; background: #fff; }
+    #send-btn { background: #0084ff; color: white; border: none; padding: 0 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+    .loading-dots { display: flex; gap: 4px; padding: 5px; }
+    .dot { width: 8px; height: 8px; background: #90949c; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
+    .dot:nth-child(1) { animation-delay: -0.32s; }
+    .dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+    img.generated { width: 100%; border-radius: 10px; margin-top: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div id="chat-container"></div>
+
+  <div id="input-area">
+    <input id="chat-input" type="text" placeholder="اكتب رسالتك هنا..." autocomplete="off">
+    <button id="send-btn">إرسال</button>
+  </div>
+
+  <script>
+    const chatContainer = document.getElementById("chat-container");
+    const input = document.getElementById("chat-input");
+    const sendBtn = document.getElementById("send-btn");
+
+    // الرابط الخاص بك مع البروكسي لتجنب خطأ Fetch
+    const TARGET_URL = "http://de3.bot-hosting.net:21007/kilwa-chat";
+    const PROXY_URL = "https://api.allorigins.win/get?url=";
+
+    async function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage("user", text);
+      input.value = "";
+
+      // إظهار مؤشر الكتابة
+      const loadingDiv = document.createElement("div");
+      loadingDiv.className = "message bot";
+      loadingDiv.innerHTML = `<div class="loading-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+      chatContainer.appendChild(loadingDiv);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      try {
+        if (text.includes("ارسم") || text.includes("صورة")) {
+          await generateImage(text, loadingDiv);
+        } else {
+          await fetchChat(text, loadingDiv);
+        }
+      } catch (error) {
+        loadingDiv.innerHTML = "❌ خطأ في الاتصال: " + error.message;
+      }
+    }
+
+    async function fetchChat(text, loadingDiv) {
+      try {
+        // نستخدم البروكسي لتجاوز حماية CORS
+        const fullUrl = `${PROXY_URL}${encodeURIComponent(TARGET_URL + "?text=" + text)}`;
+        const response = await fetch(fullUrl);
+        const data = await response.json();
+        
+        // فك تشفير المحتوى (allorigins يعيد النتيجة داخل حقل contents)
+        let botResponse = data.contents;
+
+        // إذا كان الرد عبارة عن JSON داخل نص، نحاول تحويله
+        try {
+          const jsonResponse = JSON.parse(botResponse);
+          botResponse = jsonResponse.response || jsonResponse.text || jsonResponse.message || botResponse;
+        } catch(e) {
+          // الرد نصي مباشر
+        }
+
+        loadingDiv.innerHTML = marked.parse(botResponse || "لم يتم تلقي رد.");
+      } catch (err) {
+        loadingDiv.innerHTML = "❌ فشل الوصول للبوت. تأكد أن السيرفر يعمل.";
+      }
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    async function generateImage(prompt, loadingDiv) {
+      try {
+        const transRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(prompt)}`);
+        const transData = await transRes.json();
+        const enPrompt = transData[0][0][0];
+        
+        const imgUrl = `https://pollinations.ai/p/${encodeURIComponent(enPrompt)}?width=1024&height=1024&seed=${Math.random()}`;
+        loadingDiv.innerHTML = `<img src="${imgUrl}" class="generated" onclick="window.open(this.src)">`;
+      } catch (err) {
+        loadingDiv.innerHTML = "❌ فشل رسم الصورة.";
+      }
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function appendMessage(sender, content) {
+      const msg = document.createElement("div");
+      msg.className = `message ${sender}`;
+      msg.textContent = content;
+      chatContainer.appendChild(msg);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    input.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+    sendBtn.addEventListener("click", sendMessage);
+  </script>
+</body>
+</html>
