@@ -1,66 +1,63 @@
-/**
- * هذا الملف يعمل كـ Serverless Function على Netlify
- * وظيفته: الاتصال بالبوت الخاص بك، تنظيف الرد من الرموز البرمجية، وإرساله للموقع
- */
+import { Buffer } from 'buffer'; // استيراد Buffer بشكل صريح لحل مشكلة الخطأ
 
 export async function handler(event, context) {
   try {
-    // التأكد من أن الطلب POST (المرسل من الموقع)
+    // التحقق من نوع الطلب
     if (event.httpMethod !== "POST") {
       return { 
         statusCode: 405, 
-        body: JSON.stringify({ error: "طريقة الطلب غير مسموحة" }) 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ error: "Method Not Allowed" }) 
       };
     }
 
-    // استلام الرسالة ونوعها من واجهة المستخدم
     const { message, type } = JSON.parse(event.body);
 
-    // الرابط المباشر للبوت الخاص بك
+    // الرابط الخاص بك
     const KILWA_CHAT_URL = "http://de3.bot-hosting.net:21007/kilwa-chat";
-    
+
     if (type === "chat") {
-      // الاتصال بسيرفر البوت وجلب الرد
+      // الاتصال بسيرفر البوت الخاص بك
       const response = await fetch(`${KILWA_CHAT_URL}?text=${encodeURIComponent(message)}`);
       
       if (!response.ok) {
-        throw new Error(`سيرفر البوت لا يستجيب: ${response.status}`);
+        throw new Error(`سيرفر البوت أعطى استجابة خاطئة: ${response.status}`);
       }
 
-      // قراءة الرد الخام
-      const rawResponse = await response.text();
-      let finalCleanText = rawResponse;
+      const rawText = await response.text();
+      let cleanResponseText = rawText;
 
-      // محاولة تنظيف الرد إذا كان يحتوي على هيكل JSON
+      // محاولة استخراج النص إذا كان الرد بتنسيق JSON
       try {
-        const jsonData = JSON.parse(rawResponse);
-        // استخراج النص من الحقول المحتملة
-        finalCleanText = jsonData.response || jsonData.text || jsonData.message || rawResponse;
+        const jsonData = JSON.parse(rawText);
+        cleanResponseText = jsonData.response || jsonData.text || jsonData.message || rawText;
       } catch (e) {
-        // الرد نصي مباشر، لا يحتاج لتغيير
+        // الرد نصي مباشر (مثل "أهلاً") - لا نحتاج لتغيير
       }
 
-      // إرجاع الرد بتنسيق يفهمه ملف index.html الخاص بك
+      // إرسال الرد بتنسيق متوافق مع واجهة موقعك (candidates structure)
       return {
         statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          candidates: [{ 
-            content: { 
-              parts: [{ text: finalCleanText }] 
-            } 
-          }] 
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*" 
+        },
+        body: JSON.stringify({
+          candidates: [{
+            content: {
+              parts: [{ text: cleanResponseText }]
+            }
+          }]
         }),
       };
 
     } else if (type === "image") {
-      // منطق توليد الصور (عبر مترجم جوجل ثم محرك pollinations)
-      const transUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(message)}`;
-      const transRes = await fetch(transUrl);
+      // منطق توليد الصور
+      const transRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(message)}`);
       const transData = await transRes.json();
-      const enText = transData[0][0][0];
+      const enPrompt = transData[0][0][0];
 
-      const imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enText)}?width=1024&height=1024&seed=${Math.random()}`;
+      const imageUrl = `https://pollinations.ai/p/${encodeURIComponent(enPrompt)}?width=1024&height=1024&seed=${Math.random()}`;
       
       return {
         statusCode: 200,
@@ -70,11 +67,11 @@ export async function handler(event, context) {
     }
 
   } catch (error) {
-    console.error("Internal Error:", error);
+    console.error("Function Error:", error);
     return {
       statusCode: 500,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "حدث خطأ في الخادم: " + error.message }),
+      body: JSON.stringify({ error: error.message }),
     };
   }
 }
