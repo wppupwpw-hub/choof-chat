@@ -12,8 +12,7 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     """
-    دالة متطورة تجلب التوكن وتقوم بتجربة قراءة كافة المفاتيح المحتملة (access_token, token, accessToken) 
-    وتضمن التعامل مع أي تغيير في هيكل رد السيرفر تلقائياً
+    دالة تجلب التوكن وتقوم بقراءة المفتاح الصحيح 'AccessToken' المكتشف من نظام التشخيص
     """
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
     headers = {
@@ -36,13 +35,12 @@ def get_chat_smith_token():
         
         if response.status_code == 200:
             res_json = response.json()
-            # فحص وتجربة جميع المفاتيح الممكنة للتوكن
-            token = res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
+            # قراءة التوكن بالمفتاح الصحيح المكتشف 'AccessToken' بالإضافة للحالات الأخرى كاحتياط
+            token = res_json.get('AccessToken') or res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
             
             if token:
                 return token, "OK"
             else:
-                # إذا لم يجد مفتاحاً معروفاً، يعيد أسماء الحقول المستلمة لتسهيل فحصها
                 keys_found = list(res_json.keys())
                 return None, f"مفتاح التوكن مفقود. المفاتيح المستلمة: {keys_found}"
                 
@@ -96,8 +94,16 @@ def handle_messages():
                             
                             if smith_res.status_code == 200:
                                 res_chat = smith_res.json()
-                                # تجربة قراءة كافة حقول الإجابة المتوقعة
-                                bot_response = res_chat.get('reply') or res_chat.get('response') or res_chat.get('text') or "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
+                                # تجربة قراءة كافة حقول الإجابة المتوقعة (مع فحص الأحرف الكبيرة والصغيرة كاحتياط)
+                                bot_response = (
+                                    res_chat.get('reply') or 
+                                    res_chat.get('Reply') or 
+                                    res_chat.get('response') or 
+                                    res_chat.get('Response') or 
+                                    res_chat.get('text') or 
+                                    res_chat.get('Text') or 
+                                    "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
+                                )
                             else:
                                 bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {smith_res.status_code})"
                         except Exception as e:
