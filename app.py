@@ -12,7 +12,7 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     """
-    دالة تجلب التوكن وتقوم بقراءة المفتاح الصحيح 'AccessToken' المكتشف من نظام التشخيص
+    دالة تجلب التوكن وتقوم بقراءة المفتاح الصحيح 'AccessToken'
     """
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
     headers = {
@@ -35,7 +35,6 @@ def get_chat_smith_token():
         
         if response.status_code == 200:
             res_json = response.json()
-            # قراءة التوكن بالمفتاح الصحيح المكتشف 'AccessToken' بالإضافة للحالات الأخرى كاحتياط
             token = res_json.get('AccessToken') or res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
             
             if token:
@@ -80,37 +79,54 @@ def handle_messages():
                     chat_smith_token, token_status = get_chat_smith_token()
                     
                     if chat_smith_token and token_status == "OK":
-                        try:
-                            smith_url = 'https://api.vulcanlabs.co/smith-chat/api/v1/chat'
-                            smith_headers = {
-                                'Authorization': f'Bearer {chat_smith_token}',
-                                'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
-                                'content-type': 'application/json',
-                                'accept': '*/*'
-                            }
-                            # إرسال الرسالة إلى سيرفر Chat Smith
-                            smith_res = requests.post(smith_url, json={"text": user_message}, headers=smith_headers, timeout=10)
-                            print(f"[CHAT API] Status Code: {smith_res.status_code}")
-                            
-                            if smith_res.status_code == 200:
-                                res_chat = smith_res.json()
-                                # تجربة قراءة كافة حقول الإجابة المتوقعة (مع فحص الأحرف الكبيرة والصغيرة كاحتياط)
-                                bot_response = (
-                                    res_chat.get('reply') or 
-                                    res_chat.get('Reply') or 
-                                    res_chat.get('response') or 
-                                    res_chat.get('Response') or 
-                                    res_chat.get('text') or 
-                                    res_chat.get('Text') or 
-                                    "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
+                        # تجربة الرابط الرئيسي الجديد والبديل لحل مشكلة الـ 404
+                        endpoints_to_try = [
+                            'https://api.vulcanlabs.co/smith-chat/api/v2/chat',   # الإصدار الثاني الجديد v2
+                            'https://api.vulcanlabs.co/smith-chat/api/v1/chat'    # الإصدار القديم كاحتياط
+                        ]
+                        
+                        smith_res = None
+                        last_error_status = 404
+                        
+                        smith_headers = {
+                            'Authorization': f'Bearer {chat_smith_token}',
+                            'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
+                            'content-type': 'application/json',
+                            'accept': '*/*'
+                        }
+                        
+                        # إرسال طلب المحادثة مع تجربة الروابط المتاحة
+                        for smith_url in endpoints_to_try:
+                            try:
+                                smith_res = requests.post(
+                                    smith_url, 
+                                    json={"text": user_message}, 
+                                    headers=smith_headers, 
+                                    timeout=10
                                 )
-                            else:
-                                bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {smith_res.status_code})"
-                        except Exception as e:
-                            print(f"[CHAT API] Error: {e}")
-                            bot_response = f"عذراً، حدث خطأ أثناء الاتصال بسيرفر الدردشة.\n(التشخيص: Chat connection error {str(e)})"
+                                print(f"[CHAT API - {smith_url}] Status Code: {smith_res.status_code}")
+                                if smith_res.status_code == 200:
+                                    break
+                                else:
+                                    last_error_status = smith_res.status_code
+                            except Exception as e:
+                                print(f"Failed to connect to {smith_url}: {e}")
+                                last_error_status = f"Connection error: {str(e)}"
+                        
+                        if smith_res and smith_res.status_code == 200:
+                            res_chat = smith_res.json()
+                            bot_response = (
+                                res_chat.get('reply') or 
+                                res_chat.get('Reply') or 
+                                res_chat.get('response') or 
+                                res_chat.get('Response') or 
+                                res_chat.get('text') or 
+                                res_chat.get('Text') or 
+                                "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
+                            )
+                        else:
+                            bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {last_error_status})"
                     else:
-                        # عرض التشخيص التفصيلي للمستخدم في حال فشل جلب التوكن
                         bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
                     # إرسال الرد النهائي للمستخدم عبر ميسنجر
