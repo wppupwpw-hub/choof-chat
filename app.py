@@ -12,11 +12,10 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     """
-    دالة جلب التوكن مع كامل الترويسات اللازمة لتخطي جدار الحماية
+    دالة جلب التوكن بدون رأس الطلب host لتفادي مشاكل الاتصال والـ SSL
     """
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
     headers = {
-        'host': 'api.vulcanlabs.co',
         'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
         'user-agent': 'Chat Smith Android, Version 8.251222.2(1211)',
         'x-vulcan-request-id': str(random.randint(1000000000, 9999999999)),
@@ -36,12 +35,11 @@ def get_chat_smith_token():
         
         if response.status_code == 200:
             res_json = response.json()
-            # قراءة التوكن بالمفتاح الصحيح المكتشف 'AccessToken'
             token = res_json.get('AccessToken') or res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
             if token:
                 return token, "OK"
             else:
-                return None, f"مفتاح التوكن غير موجود في الاستجابة: {list(res_json.keys())}"
+                return None, f"مفتاح التوكن مفقود. المفاتيح المتوفرة: {list(res_json.keys())}"
                 
         return None, f"فشل سيرفر التوكن برمز: {response.status_code}"
     except Exception as e:
@@ -63,7 +61,7 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def handle_messages():
     """
-    مسار استقبال الرسائل وإرسالها بالترويسات الكاملة لتخطي الـ WAF والرد الذكي
+    مسار استقبال الرسائل مع تجربة المسارات المتعددة وعرض تفاصيل الأخطاء
     """
     body = request.get_json()
     if body.get('object') == 'page':
@@ -79,18 +77,18 @@ def handle_messages():
                     chat_smith_token, token_status = get_chat_smith_token()
                     
                     if chat_smith_token and token_status == "OK":
-                        # تجربة الروابط المختلفة كاحتياط
+                        # تجربة عدة مسارات محتملة لحل مشكلة الـ 404 نهائياً
                         endpoints_to_try = [
                             'https://api.vulcanlabs.co/smith-chat/api/v1/chat',
-                            'https://api.vulcanlabs.co/smith-chat/api/v2/chat'
+                            'https://api.vulcanlabs.co/smith-chat/api/v1/conversation',
+                            'https://api.vulcanlabs.co/smith-chat/api/v1/chat/send'
                         ]
                         
                         smith_res = None
-                        last_error_status = ""
+                        last_error_info = ""
                         
-                        # الترويسات الكاملة والضرورية جداً لتجنب خطأ 404 الوهمي
+                        # الترويسات الصحيحة وبدون ترويسة host اليدوية لتجنب مشاكل الاتصال
                         smith_headers = {
-                            'host': 'api.vulcanlabs.co',
                             'Authorization': f'Bearer {chat_smith_token}',
                             'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
                             'user-agent': 'Chat Smith Android, Version 8.251222.2(1211)',
@@ -99,7 +97,7 @@ def handle_messages():
                             'accept': '*/*'
                         }
                         
-                        # تجربة الروابط والـ Payloads المحتملة لتخطي أي تحديث مفاجئ
+                        # المحاولة عبر المسارات والبيانات المختلفة
                         for smith_url in endpoints_to_try:
                             for payload in [{"text": user_message}, {"message": user_message}]:
                                 try:
@@ -112,9 +110,11 @@ def handle_messages():
                                     print(f"[CHAT API - {smith_url}] Status: {smith_res.status_code}")
                                     if smith_res.status_code == 200:
                                         break
+                                    else:
+                                        last_error_info = f"URL: {smith_url.split('/')[-1]} | Code: {smith_res.status_code} | Response: {smith_res.text[:150]}"
                                 except Exception as e:
                                     print(f"Connection failed to {smith_url}: {e}")
-                                    last_error_status = str(e)
+                                    last_error_info = f"Connection error: {str(e)}"
                             if smith_res and smith_res.status_code == 200:
                                 break
                         
@@ -129,8 +129,7 @@ def handle_messages():
                                 "استلمت رسالتك ولكن لم أستطع قراءة محتوى الرد الذكي."
                             )
                         else:
-                            status_code = smith_res.status_code if smith_res else "No Response"
-                            bot_response = f"عذراً، واجهت مشكلة في الخادم.\n(التشخيص: Chat API status {status_code}, error: {last_error_status})"
+                            bot_response = f"عذراً، واجهت مشكلة في خادم الذكاء الاصطناعي.\n(التفاصيل: {last_error_info})"
                     else:
                         bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
