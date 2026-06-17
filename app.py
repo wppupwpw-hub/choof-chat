@@ -12,10 +12,11 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     """
-    دالة تجلب التوكن وتقوم بقراءة المفتاح الصحيح 'AccessToken'
+    دالة جلب التوكن مع كامل الترويسات اللازمة لتخطي جدار الحماية
     """
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
     headers = {
+        'host': 'api.vulcanlabs.co',
         'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
         'user-agent': 'Chat Smith Android, Version 8.251222.2(1211)',
         'x-vulcan-request-id': str(random.randint(1000000000, 9999999999)),
@@ -35,23 +36,22 @@ def get_chat_smith_token():
         
         if response.status_code == 200:
             res_json = response.json()
+            # قراءة التوكن بالمفتاح الصحيح المكتشف 'AccessToken'
             token = res_json.get('AccessToken') or res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
-            
             if token:
                 return token, "OK"
             else:
-                keys_found = list(res_json.keys())
-                return None, f"مفتاح التوكن مفقود. المفاتيح المستلمة: {keys_found}"
+                return None, f"مفتاح التوكن غير موجود في الاستجابة: {list(res_json.keys())}"
                 
-        return None, f"فشل السيرفر برمز استجابة {response.status_code}"
+        return None, f"فشل سيرفر التوكن برمز: {response.status_code}"
     except Exception as e:
         print(f"[TOKEN API] Error: {e}")
-        return None, f"خطأ اتصال: {str(e)}"
+        return None, f"خطأ اتصال التوكن: {str(e)}"
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
     """
-    مسار التحقق المبدئي لفيسبوك ميسنجر
+    مسار التحقق لفيسبوك ميسنجر
     """
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
@@ -63,7 +63,7 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def handle_messages():
     """
-    مسار استقبال الرسائل ومعالجتها بالذكاء الاصطناعي وإرسال الرد الذكي
+    مسار استقبال الرسائل وإرسالها بالترويسات الكاملة لتخطي الـ WAF والرد الذكي
     """
     body = request.get_json()
     if body.get('object') == 'page':
@@ -79,39 +79,44 @@ def handle_messages():
                     chat_smith_token, token_status = get_chat_smith_token()
                     
                     if chat_smith_token and token_status == "OK":
-                        # تجربة الرابط الرئيسي الجديد والبديل لحل مشكلة الـ 404
+                        # تجربة الروابط المختلفة كاحتياط
                         endpoints_to_try = [
-                            'https://api.vulcanlabs.co/smith-chat/api/v2/chat',   # الإصدار الثاني الجديد v2
-                            'https://api.vulcanlabs.co/smith-chat/api/v1/chat'    # الإصدار القديم كاحتياط
+                            'https://api.vulcanlabs.co/smith-chat/api/v1/chat',
+                            'https://api.vulcanlabs.co/smith-chat/api/v2/chat'
                         ]
                         
                         smith_res = None
-                        last_error_status = 404
+                        last_error_status = ""
                         
+                        # الترويسات الكاملة والضرورية جداً لتجنب خطأ 404 الوهمي
                         smith_headers = {
+                            'host': 'api.vulcanlabs.co',
                             'Authorization': f'Bearer {chat_smith_token}',
                             'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
+                            'user-agent': 'Chat Smith Android, Version 8.251222.2(1211)',
+                            'x-vulcan-request-id': str(random.randint(1000000000, 9999999999)),
                             'content-type': 'application/json',
                             'accept': '*/*'
                         }
                         
-                        # إرسال طلب المحادثة مع تجربة الروابط المتاحة
+                        # تجربة الروابط والـ Payloads المحتملة لتخطي أي تحديث مفاجئ
                         for smith_url in endpoints_to_try:
-                            try:
-                                smith_res = requests.post(
-                                    smith_url, 
-                                    json={"text": user_message}, 
-                                    headers=smith_headers, 
-                                    timeout=10
-                                )
-                                print(f"[CHAT API - {smith_url}] Status Code: {smith_res.status_code}")
-                                if smith_res.status_code == 200:
-                                    break
-                                else:
-                                    last_error_status = smith_res.status_code
-                            except Exception as e:
-                                print(f"Failed to connect to {smith_url}: {e}")
-                                last_error_status = f"Connection error: {str(e)}"
+                            for payload in [{"text": user_message}, {"message": user_message}]:
+                                try:
+                                    smith_res = requests.post(
+                                        smith_url, 
+                                        json=payload, 
+                                        headers=smith_headers, 
+                                        timeout=10
+                                    )
+                                    print(f"[CHAT API - {smith_url}] Status: {smith_res.status_code}")
+                                    if smith_res.status_code == 200:
+                                        break
+                                except Exception as e:
+                                    print(f"Connection failed to {smith_url}: {e}")
+                                    last_error_status = str(e)
+                            if smith_res and smith_res.status_code == 200:
+                                break
                         
                         if smith_res and smith_res.status_code == 200:
                             res_chat = smith_res.json()
@@ -121,11 +126,11 @@ def handle_messages():
                                 res_chat.get('response') or 
                                 res_chat.get('Response') or 
                                 res_chat.get('text') or 
-                                res_chat.get('Text') or 
-                                "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
+                                "استلمت رسالتك ولكن لم أستطع قراءة محتوى الرد الذكي."
                             )
                         else:
-                            bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {last_error_status})"
+                            status_code = smith_res.status_code if smith_res else "No Response"
+                            bot_response = f"عذراً، واجهت مشكلة في الخادم.\n(التشخيص: Chat API status {status_code}, error: {last_error_status})"
                     else:
                         bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
