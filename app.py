@@ -12,7 +12,8 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     """
-    دالة لجلب توكن تطبيق Chat Smith وتجربة قراءة كافة مسميات الحقول الممكنة
+    دالة متطورة تجلب التوكن وتقوم بتجربة قراءة كافة المفاتيح المحتملة (access_token, token, accessToken) 
+    وتضمن التعامل مع أي تغيير في هيكل رد السيرفر تلقائياً
     """
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
     headers = {
@@ -35,25 +36,25 @@ def get_chat_smith_token():
         
         if response.status_code == 200:
             res_json = response.json()
-            # تجربة قراءة كافة المفاتيح المحتملة للتوكن لتفادي تغيير أسماء الحقول من المصدر
+            # فحص وتجربة جميع المفاتيح الممكنة للتوكن
             token = res_json.get('access_token') or res_json.get('accessToken') or res_json.get('token')
             
             if token:
                 return token, "OK"
             else:
-                # في حال لم يجد التوكن، يرجع أسماء الحقول التي أرسلها السيرفر لتشخيصها
+                # إذا لم يجد مفتاحاً معروفاً، يعيد أسماء الحقول المستلمة لتسهيل فحصها
                 keys_found = list(res_json.keys())
-                return None, f"Token key missing. Keys received: {keys_found}"
+                return None, f"مفتاح التوكن مفقود. المفاتيح المستلمة: {keys_found}"
                 
-        return None, f"Token API failed with status {response.status_code}"
+        return None, f"فشل السيرفر برمز استجابة {response.status_code}"
     except Exception as e:
         print(f"[TOKEN API] Error: {e}")
-        return None, f"Token connection error: {str(e)}"
+        return None, f"خطأ اتصال: {str(e)}"
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
     """
-    مسار التحقق الخاص بفيسبوك ميسنجر عند تفعيل الـ Webhook لأول مرة
+    مسار التحقق المبدئي لفيسبوك ميسنجر
     """
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
@@ -65,7 +66,7 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def handle_messages():
     """
-    مسار استقبال الرسائل ومعالجتها وإرسال الرد الذكي
+    مسار استقبال الرسائل ومعالجتها بالذكاء الاصطناعي وإرسال الرد الذكي
     """
     body = request.get_json()
     if body.get('object') == 'page':
@@ -77,11 +78,10 @@ def handle_messages():
                     
                     print(f"Received message: {user_message} from {sender_psid}")
                     
-                    # جلب التوكن الخاص بالذكاء الاصطناعي وتتبع حالته
+                    # جلب توكن الذكاء الاصطناعي
                     chat_smith_token, token_status = get_chat_smith_token()
-                    bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
-                    if chat_smith_token:
+                    if chat_smith_token and token_status == "OK":
                         try:
                             smith_url = 'https://api.vulcanlabs.co/smith-chat/api/v1/chat'
                             smith_headers = {
@@ -90,21 +90,24 @@ def handle_messages():
                                 'content-type': 'application/json',
                                 'accept': '*/*'
                             }
-                            # إرسال الرسالة إلى سيرفر الشات
+                            # إرسال الرسالة إلى سيرفر Chat Smith
                             smith_res = requests.post(smith_url, json={"text": user_message}, headers=smith_headers, timeout=10)
                             print(f"[CHAT API] Status Code: {smith_res.status_code}")
                             
                             if smith_res.status_code == 200:
                                 res_chat = smith_res.json()
-                                # تجربة قراءة حقل الرد بكافة أشكاله المتوقعة
+                                # تجربة قراءة كافة حقول الإجابة المتوقعة
                                 bot_response = res_chat.get('reply') or res_chat.get('response') or res_chat.get('text') or "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها."
                             else:
                                 bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {smith_res.status_code})"
                         except Exception as e:
                             print(f"[CHAT API] Error: {e}")
                             bot_response = f"عذراً، حدث خطأ أثناء الاتصال بسيرفر الدردشة.\n(التشخيص: Chat connection error {str(e)})"
+                    else:
+                        # عرض التشخيص التفصيلي للمستخدم في حال فشل جلب التوكن
+                        bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
-                    # إرسال الرد النهائي للمستخدم عبر فيسبوك ميسنجر
+                    # إرسال الرد النهائي للمستخدم عبر ميسنجر
                     url = f"https://graph.facebook.com/v19.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
                     requests.post(url, json={"recipient": {"id": sender_psid}, "message": {"text": bot_response}})
                     
