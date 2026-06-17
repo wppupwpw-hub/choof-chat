@@ -12,25 +12,31 @@ CHAT_SMITH_DEVICE_ID = os.getenv('CHAT_SMITH_DEVICE_ID', '378F55C6F5BDFD8D')
 
 def get_chat_smith_token():
     url = 'https://api.vulcanlabs.co/smith-auth/api/v1/token'
+    # تم إزالة رأس الطلب 'host' يدوياً لتفادي مشاكل الـ SSL والاتصال في Render
     headers = {
-        'host': 'api.vulcanlabs.co',
         'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
         'user-agent': 'Chat Smith Android, Version 8.251222.2(1211)',
         'x-vulcan-request-id': str(random.randint(1000000000, 9999999999)),
-        'content-type': 'application/json'
+        'content-type': 'application/json',
+        'accept': '*/*'
     }
     data = {
         "device_id": CHAT_SMITH_DEVICE_ID,
-        "order_id": "", "product_id": "", "purchase_token": "", "subscription_id": ""
+        "order_id": "", 
+        "product_id": "", 
+        "purchase_token": "", 
+        "subscription_id": ""
     }
     try:
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=data, headers=headers, timeout=10)
+        print(f"[TOKEN API] Status Code: {response.status_code}")
         if response.status_code == 200:
-            return response.json().get('access_token', None)
-        return None
+            token = response.json().get('access_token', None)
+            return token, "OK"
+        return None, f"Token API failed with status {response.status_code}"
     except Exception as e:
-        print(f"Error: {e}")
-        return None
+        print(f"[TOKEN API] Error: {e}")
+        return None, f"Token connection error: {str(e)}"
 
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
@@ -51,8 +57,11 @@ def handle_messages():
                 if webhook_event.get('message') and webhook_event['message'].get('text'):
                     user_message = webhook_event['message']['text']
                     
-                    chat_smith_token = get_chat_smith_token()
-                    bot_response = "عذراً، واجهت مشكلة في معالجة الرد."
+                    print(f"Received message: {user_message} from {sender_psid}")
+                    
+                    # جلب التوكن مع تتبع حالة الخطأ
+                    chat_smith_token, token_status = get_chat_smith_token()
+                    bot_response = f"عذراً، واجهت مشكلة في الاتصال بالذكاء الاصطناعي.\n(التشخيص: {token_status})"
                     
                     if chat_smith_token:
                         try:
@@ -60,16 +69,25 @@ def handle_messages():
                             smith_headers = {
                                 'Authorization': f'Bearer {chat_smith_token}',
                                 'x-vulcan-application-id': 'com.smartwidgetlabs.chatgpt',
-                                'content-type': 'application/json'
+                                'content-type': 'application/json',
+                                'accept': '*/*'
                             }
-                            smith_res = requests.post(smith_url, json={"text": user_message}, headers=smith_headers)
+                            # إرسال المحادثة
+                            smith_res = requests.post(smith_url, json={"text": user_message}, headers=smith_headers, timeout=10)
+                            print(f"[CHAT API] Status Code: {smith_res.status_code}")
+                            
                             if smith_res.status_code == 200:
-                                bot_response = smith_res.json().get('reply', bot_response)
+                                bot_response = smith_res.json().get('reply', "مرحباً! استلمت رسالتك ولكن لم أجد رداً بداخلها.")
+                            else:
+                                bot_response = f"عذراً، سيرفر الـ AI رد برمز خطأ.\n(التشخيص: Chat API failed with status {smith_res.status_code})"
                         except Exception as e:
-                            print(f"Error: {e}")
+                            print(f"[CHAT API] Error: {e}")
+                            bot_response = f"عذراً، حدث خطأ أثناء الاتصال بسيرفر الدردشة.\n(التشخيص: Chat connection error {str(e)})"
                     
+                    # إرسال الرد النهائي للمستخدم
                     url = f"https://graph.facebook.com/v19.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
                     requests.post(url, json={"recipient": {"id": sender_psid}, "message": {"text": bot_response}})
+                    
         return "EVENT_RECEIVED", 200
     return "Not Found", 404
 
